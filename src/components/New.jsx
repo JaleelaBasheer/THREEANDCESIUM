@@ -6,17 +6,37 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { CesiumIonTilesRenderer } from '3d-tiles-renderer';
+import { getAllOffset } from '../services/AllApis';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer';
+import { Card, Form,FloatingLabel, Row, Button } from 'react-bootstrap'
+
+
 
 function New({ ionAccessToken: initialIonAccessToken }) {
   const canvasRef = useRef(null);
   const [highlightColor, setHighlightColor] = useState('#ff0000');
-  const [ionAssetId, setIonAssetId] = useState('');
+  const [ionAssetId, setIonAssetId] = useState('2454078');
   const [ionAccessToken, setIonAccessToken] = useState(initialIonAccessToken);
   const [assetList, setAssetList] = useState([]);
-  
-
-  let camera, controls, scene, renderer, tiles, light, offsetParent, raycaster, mouse;
-
+  const [offsettable ,setOffsetTable] = useState([])  
+  const [scenes, setScenes] = useState(null);
+  const [table ,setTable] = useState([
+    {x:"0",y:"0",z:"0"},
+    {x:"90.00",y:"279.40",z:"31.75"},
+    {x:"99.92",y:"286.0",z:"-22.67"},
+    {x:"68",y:"296.50",z:"40.48"},
+    {x:"100",y:"286.10",z:"	-50.52"},
+    {x:"94.40",y:"294",z:"25.24"},
+    { x:"161.34", y:	"272.16",z:	"52.36"},
+   
+  ])
+  const [cubeId, setCubeId] = useState(0);
+  const [size, setSize] = useState([1, 1, 1]);
+  const [position, setPosition] = useState([0, 0, 0]);
+  const [color, setColor] = useState('#00ff00');
+  const [name, setName] = useState('Cube');
+  let camera, controls, scene, renderer, tiles, light, offsetParent, raycaster, mouse,css2dRenderer;
+  const [viewMode, setViewMode] = useState('plan'); // State to track the view mode
   const params = {
     'raycast': NONE,
     'ionAssetId': ionAssetId,
@@ -24,6 +44,22 @@ function New({ ionAccessToken: initialIonAccessToken }) {
     'reload': () => {
       reinstantiateTiles();
     },
+  };
+
+  
+   const getalloffset = async () => {
+    try {
+      const response = await getAllOffset();
+      if (response.status === 200) {
+        setOffsetTable(response.data);
+        console.log(response.data)
+      } else {
+        alert("Cannot fetch data");
+      }
+    } catch (error) {
+      console.error('Error fetching offset data:', error.message);
+      alert("Cannot fetch data");
+    }
   };
 
   const setupTiles = () => {
@@ -40,6 +76,7 @@ function New({ ionAccessToken: initialIonAccessToken }) {
     tiles.manager.addHandler(/\.gltf$/, loader);
     scene.add(tiles.group);
   };
+  
 
   const reinstantiateTiles = () => {
     if (tiles) {
@@ -50,6 +87,7 @@ function New({ ionAccessToken: initialIonAccessToken }) {
 
     tiles = new CesiumIonTilesRenderer(params.ionAssetId, params.ionAccessToken);
     tiles.onLoadTileSet = () => {
+      createLabels() 
       const sphere = new THREE.Sphere();
       tiles.getBoundingSphere(sphere);
 
@@ -66,9 +104,13 @@ function New({ ionAccessToken: initialIonAccessToken }) {
       tiles.group.quaternion.w = rotationToNorthPole.w;
 
       tiles.group.position.y = -distanceToEllipsoidCenter;
+    
+
+    
     };
 
     setupTiles();
+
   };
 
   const rotationBetweenDirections = (dir1, dir2) => {
@@ -81,20 +123,36 @@ function New({ ionAccessToken: initialIonAccessToken }) {
     rotation.normalize();
 
     return rotation;
-  };
+     };
 
   const init = () => {
     scene = new THREE.Scene();
-
-    renderer = new THREE.WebGLRenderer({ antialias: true, canvas: canvasRef.current });
-    renderer.setClearColor(0xffff00);
+    setScenes(scene);
+    renderer = new THREE.WebGLRenderer({ antialias: true, canvas: canvasRef.current ,alpha:true});
+    renderer.setClearColor(0xffff00);  //color yellow
     document.body.appendChild(renderer.domElement);
     renderer.domElement.tabIndex = 1;
 
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 4000);
-    camera.position.set(0, 0, 5);
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, .1, 4000);
+    camera.position.set(0,600,0);
+    camera.lookAt(0,0,0);
+    css2dRenderer = new CSS2DRenderer(); // Initialize CSS2DRenderer
+     css2dRenderer.setSize(window.innerWidth, window.innerHeight);
+     css2dRenderer.domElement.style.position = 'absolute';
+     css2dRenderer.domElement.style.top = '9%';
+     // Append CSS2DRenderer's DOM element to the container holding the canvas
+    //  canvasRef.current.parentElement.appendChild(renderer.domElement); 
+    //  canvasRef.current.parentElement.appendChild(css2dRenderer.domElement); 
+    // Append the WebGLRenderer (renderer.domElement) to the document body
 
-    controls = new OrbitControls(camera, renderer.domElement);
+// Append the CSS2DRenderer (css2dRenderer.domElement) to the document body
+document.body.appendChild(css2dRenderer.domElement);
+document.body.appendChild(renderer.domElement);
+
+
+     controls = new OrbitControls(camera,renderer.domElement);
+     controls = new OrbitControls(camera,css2dRenderer.domElement);
+
     controls.enableDamping = true;
     controls.screenSpacePanning = false;
     controls.minDistance = 1;
@@ -117,35 +175,103 @@ function New({ ionAccessToken: initialIonAccessToken }) {
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
+     // Set up initial view mode
+     switchViewMode(viewMode);
+
     enableInteractions();
 
     reinstantiateTiles();
 
+
     onWindowResize();
     window.addEventListener('resize', onWindowResize, false);
 
-    const gui = new GUI();
-    gui.width = 300;
+    // const gui = new GUI();
+    // gui.width = 300;
 
-    const ionOptions = gui.addFolder('myasset');
-    ionOptions.add(params, 'ionAssetId').onFinishChange(reinstantiateTiles);
+    // const ionOptions = gui.addFolder('myasset');
+    // ionOptions.add(params, 'ionAssetId').onFinishChange(reinstantiateTiles);
 
-    // Display all asset IDs in a dropdown
-    const assetDropdown = ionOptions.add(params, 'ionAssetId', assetList.map(asset => asset.id));
-    assetDropdown.onFinishChange(reinstantiateTiles);
+    // // Display all asset IDs in a dropdown
+    // const assetDropdown = ionOptions.add(params, 'ionAssetId', assetList.map(asset => asset.id));
+    // assetDropdown.onFinishChange(reinstantiateTiles);
 
-    ionOptions.add(params, 'ionAccessToken');
-    ionOptions.add(params, 'reload');
-    ionOptions.open();
+    // ionOptions.add(params, 'ionAccessToken');
+    // ionOptions.add(params, 'reload');
+    // ionOptions.open();
   };
+
+  // Switch view mode between plan and side
+  const switchViewMode = (mode) => {
+    setViewMode(mode);
+    if (mode === 'plan') {
+      console.log("Enter plan mode")
+      // Plan view settings
+      camera.position.set(0, 600, 0);
+      camera.lookAt(0, 0, 0);
+      controls.autoRotate = false;
+      controls.enablePan = true;
+      controls.enableRotate = true;
+    } else if (mode === 'side') {
+      console.log("Enter side mode")
+
+      // Side view settings
+      camera.position.set(600, 0, 0);
+      camera.lookAt(0, 0, 0);
+      controls.autoRotate = false;
+      controls.enablePan = true;
+      controls.enableRotate = true;
+    }
+  };
+
+
+  const createLabels = () => {
+ 
+table.forEach((item) => {
+  const x = parseFloat(item.x);
+        const y = parseFloat(item.y);
+        const z = parseFloat(item.z);
+// Create a vector representing the original coordinates
+const originalVector = new THREE.Vector3(x, y, z);
+
+// Define the angle of rotation (90 degrees in radians)
+const angle =- Math.PI/2 ;
+
+// Create a rotation matrix around the x-axis
+const rotationMatrix = new THREE.Matrix4().makeRotationX(angle);
+
+// Apply the rotation matrix to the original vector
+const rotatedVector = originalVector.applyMatrix4(rotationMatrix);
+
+// Extract the new coordinates
+const newX = rotatedVector.x;
+const newY = rotatedVector.y;
+const newZ = rotatedVector.z;
+const vector = new THREE.Vector3(newX,newY,newZ)
+
+  const labelDiv = document.createElement('div');
+  labelDiv.className = 'label';
+  labelDiv.innerHTML = '<i class="fa-solid fa-circle-dot" style="font-size: 5px"></i>';
+  // labelDiv.text = 'Tag 1'
+  labelDiv.style.color = '#ffffff';
+  const labelObject = new CSS2DObject(labelDiv);
+  // Set position of the label in world coordinates
+  // const position = new THREE.Vector3(newX, newY, newZ);
+  labelObject.position.set(newX,newY,newZ);
+
+  // Add label to the scene
+  scene.add(labelObject); 
+});
+};
 
   let selectedObject = null;
 
   const setHighlight = (color) => {
     if (selectedObject) {
-      const hexColor = new THREE.Color(color).getHex();
-      selectedObject.material.color.set(hexColor);
-      setHighlightColor(color);    
+    
+      // const hexColor = new THREE.Color(color).getHex();
+      // selectedObject.material.color.set(hexColor);
+      // setHighlightColor(color);    
     }
   };
 
@@ -156,15 +282,22 @@ function New({ ionAccessToken: initialIonAccessToken }) {
   const onMouseMove = (event) => {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+   
+ 
   };
-
+ 
   const onMouseClick = () => {
     raycaster.setFromCamera(mouse, camera);
   
     const intersects = raycaster.intersectObjects(scene.children, true);
+    
   
     if (intersects.length > 0) {
       const clickedObject = intersects[0].object;
+       console.log('Clicked object:', clickedObject);
+        // Access the position of the clicked object
+        const { x, y, z } = clickedObject.position;
+        console.log('Coordinates of clicked object:', x, y, z);
   
       if (selectedObject !== clickedObject) {
         if (selectedObject) {
@@ -172,12 +305,14 @@ function New({ ionAccessToken: initialIonAccessToken }) {
         }
   
         selectedObject = clickedObject;
+        selectedObject.visible = false;
   
-        // Update the color of the selected object based on the input color
-        const hexColor = new THREE.Color(highlightColor).getHex();
-        selectedObject.material.color.set(hexColor);
+        // // Update the color of the selected object based on the input color
+        // const hexColor = new THREE.Color(highlightColor).getHex();
+        // selectedObject.material.color.set(hexColor);
       }
     } else {
+      console.log("no click events")
       if (selectedObject) {
         selectedObject.material.color.set(0xffffff);
         selectedObject = null;
@@ -189,6 +324,8 @@ function New({ ionAccessToken: initialIonAccessToken }) {
   const enableInteractions = () => {
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('click', onMouseClick);
+    css2dRenderer.domElement.addEventListener('mousemove', onMouseMove);
+    css2dRenderer.domElement.addEventListener('click', onMouseClick);
   };
 
   const onWindowResize = () => {
@@ -204,8 +341,12 @@ function New({ ionAccessToken: initialIonAccessToken }) {
     camera.updateMatrixWorld();
     tiles.update();
   
-    renderer.render(scene, camera);
-  };
+ 
+      css2dRenderer.render(scene, camera);
+      renderer.render(scene, camera);
+
+   }
+    
   
 
   const animate = () => {
@@ -228,9 +369,128 @@ function New({ ionAccessToken: initialIonAccessToken }) {
   const cleanUp = () => {
     renderer.domElement.removeEventListener('mousemove', onMouseMove);
     renderer.domElement.removeEventListener('click', onMouseClick);
+    css2dRenderer.domElement.removeEventListener('mousemove', onMouseMove);
+    css2dRenderer.domElement.removeEventListener('click', onMouseClick);
   };
 
-  useEffect(() => {
+  const handleCreateBox = () => {
+    if(scenes){
+      console.log("enter handle create box")
+// Create BoxGeometry
+const geometry = new THREE.BoxGeometry(size[0], size[1], size[2]);
+console.log(size[0], size[1], size[2])
+
+// Create MeshBasicMaterial
+const material = new THREE.MeshBasicMaterial({ color: color }); // Green color
+console.log(position[0], position[1], position[2])
+
+// Create Mesh
+const box = new THREE.Mesh(geometry, material);
+// Position the cube at the specified coordinates
+box.position.set(position[0], position[1], position[2]);
+
+
+// Add the box to the scene
+scene.add(box);
+    }
+    else {
+      console.error('Scene is not initialized');
+    }
+    
+  };
+
+
+  useEffect(() => {  
+  // getalloffset();
+     
+    init();
+    
+          // Map through the offsettable array and create a cube for each set of coordinates
+          table.forEach((item) => {
+                    // Convert coordinates to numbers
+        const x =item.x;
+        const y = item.y;
+        const z = item.z;
+ // Create a vector representing the original coordinates
+ const originalVector = new THREE.Vector3(x, y, z);
+
+ // Define the angle of rotation (90 degrees in radians)
+ const angle =- Math.PI/2 ;
+
+ // Create a rotation matrix around the x-axis
+ const rotationMatrix = new THREE.Matrix4().makeRotationX(angle);
+
+ // Apply the rotation matrix to the original vector
+ const rotatedVector = originalVector.applyMatrix4(rotationMatrix);
+
+ // Extract the new coordinates
+ const newX = rotatedVector.x;
+ const newY = rotatedVector.y;
+ const newZ = rotatedVector.z;
+
+           
+    
+            // Create a cube geometry
+            const cubeGeometry = new THREE.BoxGeometry(5,5,5);
+    
+            // Create a basic material for the cube
+            const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    
+            // Create a mesh by combining the geometry and material
+            const cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            
+    
+            // Position the cube at the specified coordinates
+            cubeMesh.position.set((newX), (newY), (newZ));
+              // cubeMesh.position.set((item.x), (item.y), (item.z));
+    
+            // Add the cube mesh to the scene
+            scene.add(cubeMesh);
+        });
+
+//  // Create a vector representing the original coordinates
+//  const originalVector = new THREE.Vector3(99.92,286.0,-22.67);
+
+//  // Define the angle of rotation (90 degrees in radians)
+//  const angle =- Math.PI/2 ;
+
+//  // Create a rotation matrix around the x-axis
+//  const rotationMatrix = new THREE.Matrix4().makeRotationX(angle);
+
+//  // Apply the rotation matrix to the original vector
+//  const rotatedVector = originalVector.applyMatrix4(rotationMatrix);
+
+//  // Extract the new coordinates
+//  const newX = rotatedVector.x;
+//  const newY = rotatedVector.y;
+//  const newZ = rotatedVector.z;
+
+                    // // Create a cube geometry
+                    // const cubeGeometry = new THREE.BoxGeometry(5,5,5);
+    
+                    // // Create a basic material for the cube
+                    // const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            
+                    // // Create a mesh by combining the geometry and material
+                    // const cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                    
+            
+                    // // Position the cube at the specified coordinates
+                    // // cubeMesh.position.set((newX), (newY), (newZ));
+                    //   cubeMesh.position.set(0,0,0);
+            
+                    // // Add the cube mesh to the scene
+                    // scene.add(cubeMesh);
+       
+    animate();
+
+
+    return () => {
+      cleanUp();
+    };
+  }, [viewMode,ionAccessToken,ionAssetId,size,position,color]);
+ 
+  useEffect(()=>{
     const fetchAssetDetails = async () => {
       try {
         const response = await fetch(`https://api.cesium.com/v1/assets`, {
@@ -241,8 +501,8 @@ function New({ ionAccessToken: initialIonAccessToken }) {
 
         if (response.ok) {
           const data = await response.json();
-          console.log(data);
-          setAssetList(data);
+        setAssetList(data.items);
+         
         } else {
           console.error('Error fetching asset details:', response.statusText);
         }
@@ -250,26 +510,96 @@ function New({ ionAccessToken: initialIonAccessToken }) {
         console.error('Error fetching asset details:', error.message);
       }
     };
-
     fetchAssetDetails();
-    init();
-    animate();
-
-    return () => {
-      cleanUp();
-    };
-  }, [ionAccessToken]);
+  },[assetList,ionAssetId])
+     // Function to handle asset selection
+     const handleAssetSelection = (e) => {
+      const selectedId = e.target.value;
+      // Get all IDs in assetList
+      const allIds = assetList.map(asset => asset.id);
+      const selectedAsset = assetList.find(asset => asset.id===parseInt(selectedId));
+      setIonAssetId(selectedAsset.id);
+  };
+ 
 
   return (
+    <>
     <div>
-      <canvas ref={canvasRef}></canvas>
-      <label>Change Color</label>
+      <div>
+        {/* Buttons to switch between plan view and side view */}
+        <button onClick={() => switchViewMode('plan')}>Plan View</button>
+      <button onClick={() => switchViewMode('side')}>Side View</button>
+      <select onChange={handleAssetSelection}>
+                <option value="">Select Asset</option>
+                {assetList.map(asset => (
+                    <option key={asset.id} value={asset.id}>{asset.name}-{asset.id}</option>
+                ))}
+            </select>
+            </div>
+     
+      <button className="btn btn-primary" sx={{ width: '100%' }} data-bs-toggle="modal" data-bs-target="#staticBackdrop" >
+        Create Box
+      </button>
+            <div >
+                <canvas ref={canvasRef}></canvas>
+                {/* Additional CSS-rendered content goes here */}
+            </div>
+      {/* <label>Change Color</label>
       <input
         type="color"
         value={highlightColor}
         onChange={onColorInputChange} 
-      />
+      /> */}     
     </div>
+     {/*modal for create box */}
+ <div class="modal fade mt-5" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true"> 
+
+<div className="modal-dialog">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h1 class="modal-title fs-5" id="staticBackdropLabel">Create Box</h1>
+      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+   <Card className="shadow border rounded p-2 mt-3">
+      
+  <Form>
+  <Row>
+  <FloatingLabel controlId="floatingInputSize" label="Size" className="mb-3 col-lg-6">
+  <Form.Control type="text" placeholder="Size" name="Size" value={size.join(',')}
+          onChange={(e) => setSize(e.target.value.split(',').map(parseFloat))} />
+  </FloatingLabel>
+
+
+  <FloatingLabel controlId="floatingInputPosition" label="Position"  className="mb-3 col-lg-6">
+  <Form.Control type="text" placeholder="Position" name="Position" value={position.join(',')} onChange={(e) => setPosition(e.target.value.split(',').map(parseFloat))}/>
+  </FloatingLabel>
+
+  <FloatingLabel controlId="floatingInputColor" label="Color"  className="mb-3 col-lg-6">
+  <Form.Control  placeholder="Color" name="Color"
+       type="color" value={color} onChange={(e) => setColor(e.target.value)} /> 
+  </FloatingLabel>
+
+  <FloatingLabel controlId="floatingInputName" label="Name"  className="mb-3 col-lg-6">
+  <Form.Control type="text" placeholder="Name" name="Name" value={name} onChange={(e) => setName(e.target.value)}/>
+  </FloatingLabel>
+
+
+  </Row>
+
+  </Form>
+
+  </Card>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
+      <button type="button" onClick={handleCreateBox}  class="btn btn-success">Create</button>
+    </div>
+  </div>
+</div>
+</div> 
+
+    </>
   );
 }
 

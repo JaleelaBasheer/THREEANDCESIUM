@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import { Form,FloatingLabel, Row, Button } from 'react-bootstrap'
 import { addUser } from '../services/AllApis';
+import FileUploadProgress from './FileUploadProgress';
 
 
 function UploadAndThree() {
@@ -11,7 +12,7 @@ function UploadAndThree() {
     let offsets = []; // Array to store offsets
     let offsetsobject = []; // Array to store offsets   
     const [cumulativeCenter, setCumulativeCenter] = useState(new THREE.Vector3());
-    const [offsetTable, setOffsetTable] = useState([]);
+    const [offsetTable, setOffsetTable] = useState();
     const [objectoffsetTable, setobjectoffsetTable]= useState([]);
     const [objectMeshAssociations, setObjectMeshAssociations] = useState([]);
     const [objectAssociations, setObjectAssociations] = useState([]); 
@@ -19,6 +20,8 @@ function UploadAndThree() {
     let cumulativeBoundingBoxObject = new THREE.Box3(); // Initialize cumulative bounding box
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [progress, setProgress] = useState(0);
+
 
 
     const handleFileChange = (e) => {
@@ -30,6 +33,8 @@ function UploadAndThree() {
     const loadFBXFiles = (selectedFiles) => {
       if (!selectedFiles) return;
       const fbxLoader = new FBXLoader();
+      const totalFiles = selectedFiles.length;
+      let filesLoaded = 0;
   
       const loadedObjects = [];
       const loadedOffsets = []; // New array to store offsets
@@ -41,6 +46,9 @@ function UploadAndThree() {
       const file = selectedFiles[i];
   
        fbxLoader.load(URL.createObjectURL(file),(object) => {
+        filesLoaded++;
+        const progressPercentage = (filesLoaded / totalFiles) * 100;
+        setProgress(progressPercentage);
   
         console.log('Loaded FBX object:', object);
           // Push the loaded object and its filename into the array
@@ -250,6 +258,7 @@ function UploadAndThree() {
         </Form.Control>
        
     </Form.Group>
+    <FileUploadProgress progress={progress}/>
    { 
 loading?(
   <div className="spinner-grow text-warning text-center" role="status">

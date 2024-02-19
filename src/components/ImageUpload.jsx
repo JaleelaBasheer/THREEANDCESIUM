@@ -26,9 +26,21 @@ function ImageUpload() {
   const [offsetTable, setOffsetTable] = useState([]);
   const [objectoffsetTable, setobjectoffsetTable]= useState([]);
   const [selectedMeshBoundingBoxCenter, setSelectedMeshBoundingBoxCenter] = useState(null);
+  const [objectCenter, setobjectCenter]= useState([]);
+  const [meshcenter,setmeshcenter] = useState([]);
+
   // Update the state to store object-mesh associations
   const [objectMeshAssociations, setObjectMeshAssociations] = useState([]);
   const [objectAssociations, setObjectAssociations] = useState([]);
+
+  const [table ,setTable] = useState([
+    {x:"90.00",y:"279.40",z:"31.75"},
+    {x:"68",y:"296.50",z:"40.48"},
+    {x:"100",y:"286.10",z:"	-50.52"},
+    {x:"95.40",y:"294",z:"25.24"},
+    { x:"131.34", y:	"272.16",z:	"52.36"},
+   
+  ])
 
   let cumulativeBoundingBox = new THREE.Box3(); // Initialize cumulative bounding box
   let cumulativeBoundingBoxObject = new THREE.Box3(); // Initialize cumulative bounding box
@@ -41,6 +53,8 @@ function ImageUpload() {
     const loadedObjects = [];
     const loadedOffsets = []; // New array to store offsets
     const loadedOffsetsobject = []; // New array to store offsets
+    const fileCenter = [];
+    const singlemeshcenter = [];
 
     
 
@@ -66,12 +80,13 @@ function ImageUpload() {
               const boundingBox = calculateBoundingBox(child);
 
               // Log bounding box details for each mesh
-              console.log(`File ${i + 1} - Mesh Bounding Box Min Coordinates:`, boundingBox.min.toArray());
-              console.log(`File ${i + 1} - Mesh Bounding Box Max Coordinates:`, boundingBox.max.toArray());
+              // console.log(`File ${i + 1} - Mesh Bounding Box Min Coordinates:`, boundingBox.min.toArray());
+              // console.log(`File ${i + 1} - Mesh Bounding Box Max Coordinates:`, boundingBox.max.toArray());
 
               // Calculate center of the bounding box for each mesh
               const center = new THREE.Vector3();
-              boundingBox.getCenter(center);
+             const meshescenter = boundingBox.getCenter(center);
+             singlemeshcenter.push(meshescenter)
               console.log(`File ${i + 1} - Mesh Bounding Box Center:`, center.toArray());
                // Update cumulative bounding box
              cumulativeBoundingBox.union(boundingBox);
@@ -80,8 +95,8 @@ function ImageUpload() {
        // Log cumulative bounding box details after each file
        const minCoordinates = cumulativeBoundingBox.min.toArray();
        const maxCoordinates = cumulativeBoundingBox.max.toArray();
-           console.log('Cumulative Bounding Box Min Coordinates:',  minCoordinates);
-           console.log('Cumulative Bounding Box Max Coordinates:', maxCoordinates);
+          //  console.log('Cumulative Bounding Box Min Coordinates:',  minCoordinates);
+          //  console.log('Cumulative Bounding Box Max Coordinates:', maxCoordinates);
  
            
              // Calculate the center
@@ -91,14 +106,14 @@ function ImageUpload() {
        
        const cumulativecenter = new THREE.Vector3(centerX, centerY, centerZ);
        
-       console.log('Cumulative Bounding Box Center:', cumulativecenter.toArray())
+      //  console.log('Cumulative Bounding Box Center:', cumulativecenter.toArray())
        setCumulativeCenter(new THREE.Vector3(centerX, centerY, centerZ));
  
         // Calculate the difference between final cumulative center and individual bounding box center
          const offset = boundingBox.getCenter(new THREE.Vector3()).sub(cumulativecenter);
  
          // Log or use the offset as needed
-         console.log(`File ${i + 1} - Offset:`, offset.toArray());
+        //  console.log(`File ${i + 1} - Offset:`, offset.toArray());
  
           // Store the offset for later use
        loadedOffsets.push(offset);
@@ -122,8 +137,9 @@ function ImageUpload() {
 
       // Calculate center of the bounding box
       const center = new THREE.Vector3();
-      boundingBoxobject.getCenter(center);
-      console.log(`File ${i + 1} - Bounding Box Center:`, center.toArray());
+     const objectfilecenter= boundingBoxobject.getCenter(center);
+      console.log(`File ${i + 1} - Bounding Box Center:`, objectfilecenter.toArray());
+      
      
       // Update cumulative bounding box
       // let cumulative= cumulativeBoundingBox.union(boundingBox);
@@ -135,9 +151,10 @@ function ImageUpload() {
 const offsetObject = center.clone().sub(cumulativeCenterObject);
 
 // Log or use the offset as needed
-console.log(`File ${i + 1} - Offset Object:`, offsetObject.toArray());
+// console.log(`File ${i + 1} - Offset Object:`, offsetObject.toArray());
 
    scene.add(object);
+   fileCenter.push(objectfilecenter)
    loadedOffsetsobject.push(offsetObject);
    offsetsobject.push(offsetObject);
 
@@ -163,6 +180,8 @@ console.log(`File ${i + 1} - Offset Object:`, offsetObject.toArray());
     setObjectAssociations(loadedObjects)
     setOffsetTable(loadedOffsets);
     setobjectoffsetTable(loadedOffsetsobject);
+    setmeshcenter(singlemeshcenter);
+    setobjectCenter(fileCenter)
     setLabels(loadedLabels); // Update the labels state
     initControls();
     initLight();
@@ -465,14 +484,32 @@ const fitCameraToBoundingBox = (object) => {
   useEffect(() => {
      scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 4000);
-    camera.position.set(0, 0, 5);
+    camera.position.set(0, 5, 0);
+    // camera.lookAt(0,0,0)
     renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0xff0000);
+    renderer.setClearColor(0xFFC0CB);
     document.body.appendChild(renderer.domElement)
     css2dRenderer = new CSS2DRenderer(); // Initialize CSS2DRenderer
     document.body.appendChild(css2dRenderer.domElement);  
-    console.log(objectoffsetTable)
+    
+//     table.forEach((item) => {
+//       // Create a cube geometry
+//        const cubeGeometry = new THREE.BoxGeometry(5,5,5);
+
+//        // Create a basic material for the cube
+//        const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+//        // Create a mesh by combining the geometry and material
+//        const cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
+
+//        // Position the cube at the specified coordinates
+//        cubeMesh.position.set(item.x, item.y, item.z);
+
+//        // Add the cube mesh to the scene
+//        scene.add(cubeMesh); 
+//  });
+       
         return () => {
       window.removeEventListener('resize', onWindowResize);
      cleanUp()
@@ -480,7 +517,7 @@ const fitCameraToBoundingBox = (object) => {
         renderer.dispose();
       }
     };
-  }, [cumulativeCenter,labels,offsetTable,objectoffsetTable]);
+  }, [cumulativeCenter,labels,offsetTable,objectoffsetTable,objectCenter]);
   const renderContextMenu = () => {
     if (contextMenuPosition.x !== 0 && contextMenuPosition.y !== 0) {
       return (
@@ -516,9 +553,9 @@ const fitCameraToBoundingBox = (object) => {
           <tr>
             <th>No:</th>
             <th>Object Name</th>
-            <th>Offset X</th>
-            <th>Offset Y</th>
-            <th>Offset Z</th>
+            <th>Center X</th>
+            <th>Center Y</th>
+            <th>Center Z</th>
           </tr>
         </thead>
         <tbody>
@@ -526,9 +563,9 @@ const fitCameraToBoundingBox = (object) => {
           <tr key={index}>
             <td>{index + 1}</td>
             <td>{association.filename.replace(/\.[^.]+$/, '')}</td>
-            <td>{objectoffsetTable[index].x.toFixed(2)}</td>
-            <td>{objectoffsetTable[index].y.toFixed(2)}</td>
-            <td>{objectoffsetTable[index].z.toFixed(2)}</td>
+            <td>{objectCenter[index].x.toFixed(2)}</td>
+            <td>{objectCenter[index].y.toFixed(2)}</td>
+            <td>{objectCenter[index].z.toFixed(2)}</td>
           </tr>
         ))}
       </tbody>
@@ -556,9 +593,9 @@ const renderCombinedTable = () => {
                       <td>{index+1}</td>
                       <td>{association.objectName.replace(/\.[^.]+$/, '')}</td>
                       <td>{association.mesh.name}</td>
-                      <td>{offsetTable[index].x.toFixed(2)}</td>
-                      <td>{offsetTable[index].y.toFixed(2)}</td>
-                      <td>{offsetTable[index].z.toFixed(2)}</td>
+                      <td>{meshcenter[index].x}</td>
+                      <td>{meshcenter[index].y}</td>
+                      <td>{meshcenter[index].z}</td>
                   </tr>
               ))}
           </tbody>

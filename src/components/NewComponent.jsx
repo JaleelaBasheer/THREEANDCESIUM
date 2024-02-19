@@ -8,47 +8,39 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { CesiumIonTilesRenderer } from '3d-tiles-renderer';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer';
 import Label from './Label';
-import { Box3 ,Plane, Vector3 } from 'three';
-
+import { getAllOffset } from '../services/AllApis';
 
 
 function NewComponent() {
-  let camera, controls, scene, renderer, tiles, offsetParent, raycaster, mouse, css2dRenderer,cameraHelper;
+  let camera, controls, scene, renderer, tiles,offsetParent, css2dRenderer;
   let selectedObject = null;
-
+  const raycaster = new THREE.Raycaster(); // Initialize raycaster
+  const mouse = new THREE.Vector2(); // Initialize mouse
   const canvasRef = useRef(null);
-  const [highlightColor, setHighlightColor] = useState('#ff0000');
-  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-  const [assetList, setAssetList] = useState([]);
-  const [labels, setLabels] = useState([]);
-  const [labelsVisible, setLabelsVisible] = useState(false);   // Assuming offsetTable contains the coordinates from the offset table
-   const offsetTable = [
-    { objectname:"CA-202001_HO",x: 0, y: 0, z: 0 }, // Example coordinates, replace with actual data
-    { objectname:"PL-202003_HO",x:6.63,y:11.24, z:3.40},
-    { objectname:"PL-202005_HO",x: 7.14,y: 3.60, z: 1.82 },
-    {objectname:"PL-202006_HO",x:	6.12,y:9.52,z:	3.53},
-    {objectname:"PL-202008_HO",x:4.36,y:10.99,z:0.85},
-    {objectname:"PL-202050_HO",x:11.81,y:0.07,z:-1.18},
-    {objectname:"PL-202051_HO",x:12.58,y:-0.92,z:-1.30},
-    {	objectname:"PL-202052_HO",x: 12.42,y: -2.57,z:-0.14},
-    {	objectname:"PL-202002_HO",x: -.07,y: 3.57,z:-3.23},
-    {	objectname:"	PL-202004_HO",x: -1.05,y: 11.17,z:1.76},
-    // {	objectname:"PL-202052_HO",x: 9.85,y: -3,z:-1.98}
-
-
-  ];
-  const [clippingPlane] = useState(new Plane(new Vector3(0, 0, -1), 0));
-
+  const [offsettable ,setOffsetTable] = useState([])
   
   const params = {
     'raycast': NONE,
-    'ionAssetId': '2420609',
+    'ionAssetId': '2454078',
     'ionAccessToken': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwZWU3MTJjNi00Njk1LTQxZDktYmE4OS1mY2I3NTIyYzVhZTgiLCJpZCI6MTg3NjI0LCJpYXQiOjE3MDQ1NjAzMzF9.5FAkHltPwh5gROFmAfIEalS68ob5Xnsjt7EMkNcyIjE',
     'reload': () => {
       reinstantiateTiles();
     }
   };
-  const ionAssetId = '2420609';
+
+  const [table ,setTable] = useState([
+     {x:"0",y:"0",z:"0"},
+    {x:"90.00",y:"279.40",z:"31.75"},
+    {x:"99.92",y:"286.0",z:"-22.67"},
+    {x:"68",y:"296.50",z:"40.48"},
+    {x:"100",y:"286.10",z:"	-50.52"},
+    {x:"94.40",y:"294",z:"25.24"},
+    { x:"161.34", y:	"272.16",z:	"52.36"},
+   
+  ])
+    const [viewMode, setViewMode] = useState('plan'); // State to track the view mode
+
+  const ionAssetId = '2454078';
   const ionAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwZWU3MTJjNi00Njk1LTQxZDktYmE4OS1mY2I3NTIyYzVhZTgiLCJpZCI6MTg3NjI0LCJpYXQiOjE3MDQ1NjAzMzF9.5FAkHltPwh5gROFmAfIEalS68ob5Xnsjt7EMkNcyIjE';
 
   // useEffect(() => {
@@ -75,117 +67,78 @@ function NewComponent() {
 
   //   fetchAssetDetails();
   // }, [ionAccessToken, ionAssetId]);
-
-  useEffect(() => {
-    if (labelsVisible) {
-      createLabels();
-    }
-    if (renderer) {
-      renderer.clippingPlanes = [clippingPlane];
-      renderer.localClippingEnabled = true; // Enable local clipping if needed
-    }
-  }, [renderer, clippingPlane,labelsVisible]);
-
-  const setupTiles = () => {
-    tiles.fetchOptions.mode = 'cors';
-
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath('https://unpkg.com/three@0.153.0/examples/jsm/libs/draco/gltf/');
-    const loader = new GLTFLoader(tiles.manager);
-    loader.setDRACOLoader(dracoLoader);
-    tiles.manager.addHandler(/\.gltf$/, loader);
-    scene.add(tiles.group);
+// Array to hold references to label objects
    
 
-  };
+  // const onClick = (event) => {
+  //   event.preventDefault();
+  //   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  //   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-  
-  const reinstantiateTiles = () => {
-    if (tiles) {
-      scene.remove(tiles.group);
-      tiles.dispose();
-      tiles = null;
-    }
+  //   raycaster.setFromCamera(mouse, camera);
+  //   const intersects = raycaster.intersectObjects(scene.children, true);
 
-    tiles = new CesiumIonTilesRenderer(params.ionAssetId, params.ionAccessToken);
-    tiles.onLoadTileSet = () => {
-      const sphere = new THREE.Sphere();
-      tiles.getBoundingSphere(sphere);
-      console.log(tiles.getBoundingSphere(sphere))
+   
+  //   if (intersects.length > 0) {
+  //     console.log('Object clicked');
+  //     const intersect = intersects[0];
+  //     const index = labels.findIndex(label => label.element === intersect.object.element);
 
-      const position = sphere.center.clone();
-      console.log(position)
-
-      const distanceToEllipsoidCenter = position.length();
-      console.log(distanceToEllipsoidCenter)
-
-
-      const surfaceDirection = position.normalize();
-      const up = new THREE.Vector3(0, 1, 0);
-      const rotationToNorthPole = rotationBetweenDirections(surfaceDirection, up);
-
-      tiles.group.quaternion.x = rotationToNorthPole.x;
-      tiles.group.quaternion.y = rotationToNorthPole.y;
-      tiles.group.quaternion.z = rotationToNorthPole.z;
-      tiles.group.quaternion.w = rotationToNorthPole.w;
-
-      tiles.group.position.y = -distanceToEllipsoidCenter;
-      setupTiles();
-      // Create spheres based on the offset table data
-      createLabels();
-
-    };
-       setupTiles();
-  };
-  
-  const createLabels = () => {
-      offsetTable.forEach((labelInfo) => {
-        const labelDiv = document.createElement('div');
-        labelDiv.className = 'label';
-        labelDiv.textContent = labelInfo.objectname;
-        labelDiv.style.color = '#ffffff';
-        const labelObject = new CSS2DObject(labelDiv);
-        labelObject.position.set(labelInfo.x, labelInfo.y, labelInfo.z);
-  
-        scene.add(labelObject);
-        
-      });
-  };
-  
+  //     if (index !== -1) {
+  //         showLabel(index); // Show the label for the clicked object
+  //     }
+  // } else {
+  //     console.log("No objects clicked");
+  // }
+  // };
 
 
-  const rotationBetweenDirections = (dir1, dir2) => {
-    const rotation = new THREE.Quaternion();
-    const a = new THREE.Vector3().crossVectors(dir1, dir2);
-    rotation.x = a.x;
-    rotation.y = a.y;
-    rotation.z = a.z;
-    rotation.w = 1 + dir1.clone().dot(dir2);
-    rotation.normalize();
+   // Fetch offset data
+   
+   
+  //  const getalloffset = async () => {
+  //   try {
+  //     const response = await getAllOffset();
+  //     if (response.status === 200) {
+  //       setOffsetTable(response.data);
+  //       console.log(response.data)
+  //     } else {
+  //       alert("Cannot fetch data");
+  //     }
+  //   } catch (error) {
+  //     console.error('Error fetching offset data:', error.message);
+  //     alert("Cannot fetch data");
+  //   }
+  // };
 
-    return rotation;
-  };
+  // useEffect for component initialization and data fetching
 
   const init = () => {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 4000);
-    camera.position.set(0, 0, 5);
+    camera.position.set(0,400,0);
+    camera.lookAt(0,0,0);
+    scene.add(camera)
     renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0xff0000);
-    // document.body.appendChild(renderer.domElement)
-    css2dRenderer = new CSS2DRenderer(); // Initialize CSS2DRenderer
-    css2dRenderer.setSize(window.innerWidth, window.innerHeight);
-    css2dRenderer.domElement.style.position = 'absolute';
-    css2dRenderer.domElement.style.top = 0;
-    // Append CSS2DRenderer's DOM element to the container holding the canvas
-    canvasRef.current.parentElement.appendChild(css2dRenderer.domElement); 
-    renderer.clippingPlanes = [clippingPlane];
-    controls = new OrbitControls(camera, css2dRenderer.domElement);
+    renderer.setPixelRatio(window.devicePixelRatio);
+		renderer.setClearColor(0x6dc5db);
+		renderer.setAnimationLoop(animate());     // document.body.appendChild(renderer.domElement)
+     css2dRenderer = new CSS2DRenderer(); // Initialize CSS2DRenderer
+     css2dRenderer.setSize(window.innerWidth, window.innerHeight);
+     css2dRenderer.domElement.style.position = 'absolute';
+     css2dRenderer.domElement.style.top = 0;
+     // Append CSS2DRenderer's DOM element to the container holding the canvas
+     canvasRef.current.parentElement.appendChild(css2dRenderer.domElement); 
+
+     controls = new OrbitControls(camera,css2dRenderer.domElement);
+
     controls.enableDamping = true;
     controls.screenSpacePanning = false;
     controls.minDistance = 1;
     controls.maxDistance = 2000;
+
+
 
     const dirLight = new THREE.DirectionalLight(0xffffff);
     dirLight.position.set(1, 2, 3);
@@ -195,13 +148,9 @@ function NewComponent() {
     scene.add(ambLight);
 
     offsetParent = new THREE.Group();
-    scene.add(offsetParent);
-
-    raycaster = new THREE.Raycaster();
-    mouse = new THREE.Vector2();
+    scene.add(offsetParent); 
 
     enableInteractions();
-
     reinstantiateTiles();
    
     onWindowResize();
@@ -217,219 +166,306 @@ function NewComponent() {
     // ionOptions.open();
   };
 
-  const setHighlight = (color) => {
-    if (selectedObject) {
-      const hexColor = new THREE.Color(color).getHex();
-      selectedObject.material.color.set(hexColor);
-    }
+  const setupTiles = () => {
+    tiles.fetchOptions.mode = 'cors';
+
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://unpkg.com/three@0.153.0/examples/jsm/libs/draco/gltf/');
+    const loader = new GLTFLoader(tiles.manager);
+    loader.setDRACOLoader(dracoLoader);
+    tiles.manager.addHandler(/\.gltf$/, loader);
+    scene.add(tiles.group);
+    // offsetParent.add(tiles.group);
+   
+    
   };
 
-  const onMouseMove = (event) => {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-  };
 
-  const onMouseClick = (event) => {
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
-
-    if (intersects.length > 0) {
-      const clickedObject = intersects[0].object;
-
-      if (event.button === 0) {
-        console.log('Left-click');
-        if (selectedObject) {
-          selectedObject.material.color.set(0xffffff);
-        }
-
-        selectedObject = clickedObject;
-        selectedObject.material.color.set(highlightColor);
-        
-
-      // bounding box of clicked object
-       // Calculate bounding box coordinates
-       const boundingBox = new Box3().setFromObject(selectedObject);
-       const center = boundingBox.getCenter(new THREE.Vector3());
-       const size = boundingBox.getSize(new THREE.Vector3());
-       const minCoordinates = boundingBox.min.clone();
-       const maxCoordinates = boundingBox.max.clone();
-      //  console.log("Bounding Box Min Coordinates:", minCoordinates);
-      //  console.log("Bounding Box Max Coordinates:", maxCoordinates);
-       console.log("Bounding Box center:", center);    
-      }
-      if (event.button === 2) {
-        console.log('Right-click');
-        setContextMenuPosition({ x: event.clientX, y: event.clientY });
-
-        raycaster.setFromCamera({ x: mouse.x, y: mouse.y + 0.1 }, camera);
-
-        const intersectsAbove = raycaster.intersectObjects(scene.children, true);
-
-        if (intersectsAbove.length > 0) {
-          selectedObject = intersectsAbove[0].object;
-        } else {
-          setContextMenuPosition({ x: 0, y: 0 });
-          selectedObject = null;
-        }
-      }
-    } else {
-      if (selectedObject && event.button === 0) {
-        console.log('Clicked outside of any object');
-        selectedObject.material.color.set(0xffffff);
-        selectedObject = null;
-      }
-    }
-  };
- 
-  const handleAddCommentButton = () => {
-    const labelText = 'Label for ';
-    const existingComment = labels.find(label => label.text === labelText)?.comment || '';
-    const newComment = window.prompt(`Add a comment for "${labelText}":`, existingComment);
-    if (newComment !== null) {
-      setLabels((prevLabels) => [
-        ...prevLabels,
-        {
-          position: { x: contextMenuPosition.x, y: contextMenuPosition.y },
-          text: labelText,
-          comment: newComment,
-        },
-      ]);
-    }
-    setContextMenuPosition({ x: 0, y: 0 });
-  };
-
-  const enableInteractions = () => {
-    renderer.domElement.addEventListener('mousemove', onMouseMove);
-    renderer.domElement.addEventListener('click', onMouseClick);
-    renderer.domElement.addEventListener('contextmenu', handleContextMenu);
-    renderer.domElement.addEventListener('click', handleClickOutsideContextMenu);
-  };
-
-  const handleContextMenu = (event) => {
-    if (selectedObject) {
-      setContextMenuPosition({ x: event.clientX, y: event.clientY });
-    }
-  };
-
-  const handleContextMenuColorChange = (color) => {
-    setHighlightColor(color);
-
-    if (selectedObject) {
-      const hexColor = new THREE.Color(color).getHex();
-      selectedObject.material.color.set(hexColor);
-    }
-  };
-
-  const handleClickOutsideContextMenu = () => {
-    if (contextMenuPosition.x !== 0 && contextMenuPosition.y !== 0) {
-      setContextMenuPosition({ x: 0, y: 0 });
-    }
-  };
-
-  const onWindowResize = () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-  };
-
-  const onCommentClick = (labelText, existingComment) => {
-    const newComment = window.prompt(`Add a comment for "${labelText}":`, existingComment);
-    console.log(`Comment for "${labelText}":`, newComment);
-  };
-
-  const renderLabels = () => {
-    return labels.map((label, index) => (
-      <Label
-        key={index}
-        position={label.position}
-        text={label.text}
-        onCommentClick={(labelText, existingComment) =>
-          onCommentClick(labelText, existingComment)
-        }
-      />
-    ));
-  };
-
-  const animate = () => {
-    requestAnimationFrame(animate);
-
-    if (!tiles) return;
-
-    tiles.setCamera(camera);
-    tiles.setResolutionFromRenderer(camera, renderer);
-
-    camera.updateMatrixWorld();
-    tiles.update();
-     // Update clipping plane position or orientation
-     clippingPlane.constant += 0.01; // Example: Move the clipping plane along the z-axis
-
-    if (renderer && scene && camera ) {
- 
-      renderer.render(scene, camera);
-    }
-    if (css2dRenderer && scene && camera ) {
- 
-      css2dRenderer.render(scene, camera);
+  const reinstantiateTiles = () => {
+    if (tiles) {
+      scene.remove(tiles.group);
+      tiles.dispose();
+      tiles = null;
     }
 
-    if (controls) {
-      controls.update();
-    }
-  };
+    tiles = new CesiumIonTilesRenderer(params.ionAssetId, params.ionAccessToken);
+    tiles.onLoadTileSet = () => {
 
-  const cleanUp = () => {
-    renderer.domElement.removeEventListener('mousemove', onMouseMove);
-    renderer.domElement.removeEventListener('click', onMouseClick);
-    renderer.domElement.removeEventListener('contextmenu', handleContextMenu);
-    renderer.domElement.removeEventListener('click', handleClickOutsideContextMenu);
-  };
- 
+      const sphere = new THREE.Sphere();
 
+      tiles.getBoundingSphere(sphere);
+      const position = sphere.center.clone();
+      const distanceToEllipsoidCenter = position.length();
+      
+      const surfaceDirection = position.normalize();
+      const up = new THREE.Vector3(0, 1, 0);
+      const rotationToNorthPole = rotationBetweenDirections(surfaceDirection, up);
 
-  useEffect(() => {
-    init();
+      tiles.group.quaternion.x = rotationToNorthPole.x;
+      tiles.group.quaternion.y = rotationToNorthPole.y;
+      tiles.group.quaternion.z = rotationToNorthPole.z;
+      tiles.group.quaternion.w = rotationToNorthPole.w;
 
-    animate();
+      tiles.group.position.y = -distanceToEllipsoidCenter;
 
-    return () => {
-      cleanUp();
+      setupTiles();       
+
     };
-  }, [highlightColor]);
-
-  const renderContextMenu = () => {
-    if (contextMenuPosition.x !== 0 && contextMenuPosition.y !== 0) {
-      return (
-        <div
-          style={{
-            position: 'absolute',
-            top: contextMenuPosition.y-30,
-            left: contextMenuPosition.x,
-            background: '#fff',
-            padding: '5px',
-            boxShadow: '0px 0px 5px 0px rgba(0,0,0,0.75)',
-            zIndex: 1000,
-          }}
-        >
-          <label> Select Highlight Color: </label>
-          <input
-            type="color"
-            value={highlightColor}
-            onInput={(e) => handleContextMenuColorChange(e.target.value)}
-          />
-          <button onClick={() => handleAddCommentButton()}>Add Comment</button>
-        </div>
-      );
-    }
-    return null;
+       setupTiles();
   };
+
+
+// const createLabels = () => {
+//   if (offsettable.length > 0 && offsettable[0]?.offsetTable) {
+//     console.log(offsettable);
+//     console.log(offsettable[0].offsetTable);
+//     console.log(offsettable[0].offsetTable[0]);
+//     setgetData(offsettable[0].offsetTable[0]);
+
+//     if (scene) {
+//       offsettable[0].offsetTable[0].forEach((item) => {
+//         const labelDiv = document.createElement('div');
+//         labelDiv.className = 'label';
+//         labelDiv.innerHTML = '<i class="fa-solid fa-circle-dot" style="font-size: 5px"></i>'; // Note the corrected HTML syntax
+//         labelDiv.style.color = '#ffffff';
+//         const labelObject = new CSS2DObject(labelDiv);
+//         labelObject.position.set(item.offset[0], item.offset[1], item.offset[2]);
+
+//         if (scene) {
+//           scene.add(labelObject);
+//         }
+//       });
+//     }
+//   } else {
+//     console.warn('Offset data is not available.');
+//   }
+// };
+
+const createLabels = () => {
+      console.log(offsettable);
+      console.log(offsettable[0].offsetTable);
+      console.log(offsettable[0].offsetTable[0]);
+  offsettable[1].offsetTable[0].forEach((item) => {
+     // Convert coordinates to numbers
+     const x = parseFloat(item.offset[0]);
+     const y = parseFloat(item.offset[1]);
+     const z = parseFloat(item.offset[2]);
+     // Suppose you have a coordinate in Three.js
+const cesiumCoordinate  = new THREE.Vector3(x, y, z);
+
+// Convert from Three.js coordinate system to Cesium's right-handed coordinate system
+// Convert to Three.js coordinate system
+const threeX = cesiumCoordinate.y; // Swap Y and Z
+const threeY = -cesiumCoordinate.x; // Invert Y-axis
+const threeZ = cesiumCoordinate.z; // Keep Z as is
+// Apply 180-degree counterclockwise rotation
+const theta = Math.PI; // 180 degrees in radians
+const newX = Math.cos(theta) * threeX+Math.sin(theta) * threeY;
+const newY = -Math.sin(theta) * threeX + Math.cos(theta) * threeY;
+
+
+// Resulting Three.js coordinate
+const threeCoordinate = { x: threeX, y: threeY, z: threeZ };
+console.log(threeCoordinate)
+   
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'label';
+    labelDiv.innerHTML = '<i class="fa-solid fa-circle-dot" style="font-size: 5px"></i>';
+    labelDiv.style.color = '#ffffff';
+    const labelObject = new CSS2DObject(labelDiv);
+    // Set position of the label in world coordinates
+    const position = new THREE.Vector3(newX, newY, threeZ);
+    labelObject.position.copy(position);
+    // Add label to the scene
+    scene.add(labelObject);
+  });
+};
+
+
+
+  const rotationBetweenDirections = (dir1, dir2) => {
+    const rotation = new THREE.Quaternion();
+    const a = new THREE.Vector3().crossVectors(dir1, dir2);
+    rotation.x = a.x;
+    rotation.y = a.y;
+    rotation.z = a.z;
+    rotation.w = 1 + dir1.clone().dot(dir2);
+    rotation.normalize();
+
+    return rotation;
+  };
+
+
+ // Switch view mode between plan and side
+ const switchViewMode = (mode) => {
+  setViewMode(mode);
+  if (mode === 'plan') {
+    // Plan view settings
+    camera.position.set(0, 600, 0);
+    camera.lookAt(0, 0, 0);
+    controls.autoRotate = false;
+    controls.enablePan = true;
+    controls.enableRotate = true;
+  } else if (mode === 'side') {
+    // Side view settings
+    camera.position.set(600, 0, 0);
+    camera.lookAt(0, 0, 0);
+    controls.autoRotate = false;
+    controls.enablePan = true;
+    controls.enableRotate = true;
+  }
+};
+
+
+const setHighlight = (color) => {
+  if (selectedObject) {
+  
+    // const hexColor = new THREE.Color(color).getHex();
+    // selectedObject.material.color.set(hexColor);
+    // setHighlightColor(color);    
+  }
+};
+
+const onColorInputChange = (e) => {
+  setHighlight(e.target.value);
+};
+
+const onMouseMove = (event) => {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+};
+
+const onMouseClick = () => {
+  raycaster.setFromCamera(mouse, camera);
+
+  const intersects = raycaster.intersectObjects(scene.children, true);
+  console.log("mouse click")
+
+  if (intersects.length > 0) {
+    const clickedObject = intersects[0].object;
+
+    if (selectedObject !== clickedObject) {
+      if (selectedObject) {
+        selectedObject.material.color.set(0xffffff);
+      }
+
+      selectedObject = clickedObject;
+      selectedObject.visible = false;
+
+      // // Update the color of the selected object based on the input color
+      // const hexColor = new THREE.Color(highlightColor).getHex();
+      // selectedObject.material.color.set(hexColor);
+    }
+  } else {
+    if (selectedObject) {
+      selectedObject.material.color.set(0xffffff);
+      selectedObject = null;
+    }
+  }
+};
+
+
+const enableInteractions = () => {
+  renderer.domElement.addEventListener('mousemove', onMouseMove);
+  renderer.domElement.addEventListener('click', onMouseClick);
+};
+
+const onWindowResize = () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+};
+const render = () => {
+  tiles.setCamera(camera);
+  tiles.setResolutionFromRenderer(camera, renderer);
+
+  camera.updateMatrixWorld();
+  tiles.update();
+
+  renderer.render(scene, camera);
+};
+
+
+const animate = () => {
+  requestAnimationFrame(animate);
+
+  if (!tiles) return;
+
+  tiles.setCamera(camera);
+  tiles.setResolutionFromRenderer(camera, renderer);
+
+  camera.updateMatrixWorld();
+  tiles.update();
+
+  render(); // Trigger a re-render    
+  if (controls) {
+    controls.update();
+  }
+};
+
+const cleanUp = () => {
+  renderer.domElement.removeEventListener('mousemove', onMouseMove);
+  renderer.domElement.removeEventListener('click', onMouseClick);
+};
+
+//  useEffect(()=>{
+//   getalloffset();
+//   },[])
+
+
+   useEffect(() => {
+      init(); 
+      table.forEach((item) => {
+        const x =item.x;
+        const y = item.y;
+        const z = item.z;
+ // Create a vector representing the original coordinates
+ const originalVector = new THREE.Vector3(x, y, z);
+
+ // Define the angle of rotation (90 degrees in radians)
+ const angle =- Math.PI/2 ;
+
+ // Create a rotation matrix around the x-axis
+ const rotationMatrix = new THREE.Matrix4().makeRotationX(angle);
+
+ // Apply the rotation matrix to the original vector
+ const rotatedVector = originalVector.applyMatrix4(rotationMatrix);
+
+ // Extract the new coordinates
+ const newX = rotatedVector.x;
+ const newY = rotatedVector.y;
+ const newZ = rotatedVector.z;
+           // Create a cube geometry
+            const cubeGeometry = new THREE.BoxGeometry(5,5,5);
+    
+            // Create a basic material for the cube
+            const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    
+            // Create a mesh by combining the geometry and material
+            const cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    
+            // Position the cube at the specified coordinates
+            cubeMesh.position.set(newX, newY, newZ);
+    
+            // Add the cube mesh to the scene
+            scene.add(cubeMesh); 
+      });
+       
+      animate();
+    
+    return () => {
+        cleanUp();
+    };
+        
+  }, [offsettable]);
+
+ 
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* {renderContextMenu()}
-      {renderLabels()} */}
-      {/* <button onClick={toggleLabels}>Populate Tags</button>      */}
         <canvas ref={canvasRef}></canvas>
+       
     </div>
   );
 }

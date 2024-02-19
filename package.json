@@ -4,6 +4,10 @@
   "private": true,
   "dependencies": {
     "@babylonjs/core": "^6.34.3",
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.7",
+    "@mui/material": "^5.15.7",
     "@react-oauth/google": "^0.12.1",
     "@react-three/drei": "^9.89.3",
     "@testing-library/jest-dom": "^5.17.0",
@@ -19,6 +23,7 @@
     "react": "^18.2.0",
     "react-bootstrap": "^2.9.1",
     "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.3",
     "react-scripts": "5.0.1",
     "react-three-fiber": "^6.0.13",
     "request-promise": "^4.2.6",
