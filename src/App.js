@@ -35,7 +35,7 @@ function App() {
   
    {/* <Upload></Upload> */}
    {/* <NewComponent></NewComponent> */}
-   {/* <New ionAccessToken="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwZWU3MTJjNi00Njk1LTQxZDktYmE4OS1mY2I3NTIyYzVhZTgiLCJpZCI6MTg3NjI0LCJpYXQiOjE3MDQ1NjAzMzF9.5FAkHltPwh5gROFmAfIEalS68ob5Xnsjt7EMkNcyIjE"></New> */}
+   <New ionAccessToken="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwZWU3MTJjNi00Njk1LTQxZDktYmE4OS1mY2I3NTIyYzVhZTgiLCJpZCI6MTg3NjI0LCJpYXQiOjE3MDQ1NjAzMzF9.5FAkHltPwh5gROFmAfIEalS68ob5Xnsjt7EMkNcyIjE"></New>
    {/* <UploadAndThree></UploadAndThree> */}
    {/* <Main></Main> */}
    {/* <MergeBoth3andCesium></MergeBoth3andCesium> */}
@@ -44,7 +44,7 @@ function App() {
    {/* <ThreeDCanvas></ThreeDCanvas> */}
    {/* <Canvass></Canvass> */}
 {/*  */}
-<Cubee></Cubee>
+{/* <Cubee></Cubee> */}
       
     </div>
   );

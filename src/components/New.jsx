@@ -30,11 +30,12 @@ function New({ ionAccessToken: initialIonAccessToken }) {
     { x:"161.34", y:	"272.16",z:	"52.36"},
    
   ])
-  const [cubeId, setCubeId] = useState(0);
-  const [size, setSize] = useState([1, 1, 1]);
-  const [position, setPosition] = useState([0, 0, 0]);
-  const [color, setColor] = useState('#00ff00');
-  const [name, setName] = useState('Cube');
+   // Define variable for creating box
+   const [size, setSize] = useState([1, 1, 1]);
+   const [position, setPosition] = useState([0, 0, 0]);
+   const [color, setColor] = useState('#00ff00');
+   const [name, setName] = useState('Cube');
+
   let camera, controls, scene, renderer, tiles, light, offsetParent, raycaster, mouse,css2dRenderer;
   const [viewMode, setViewMode] = useState('plan'); // State to track the view mode
   const params = {
@@ -46,7 +47,9 @@ function New({ ionAccessToken: initialIonAccessToken }) {
     },
   };
 
-  
+  // Set the new size of the canvas
+const innerWidth = 800;
+const innerHeight = 600;
    const getalloffset = async () => {
     try {
       const response = await getAllOffset();
@@ -126,33 +129,29 @@ function New({ ionAccessToken: initialIonAccessToken }) {
      };
 
   const init = () => {
+     // Set the new size of the canvas
+const innerWidth = 600;
+const innerHeight = 600;
     scene = new THREE.Scene();
     setScenes(scene);
     renderer = new THREE.WebGLRenderer({ antialias: true, canvas: canvasRef.current ,alpha:true});
     renderer.setClearColor(0xffff00);  //color yellow
     document.body.appendChild(renderer.domElement);
     renderer.domElement.tabIndex = 1;
+    document.body.appendChild(renderer.domElement);
 
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, .1, 4000);
+    camera = new THREE.PerspectiveCamera(60, innerWidth  / innerHeight , .1, 4000);
     camera.position.set(0,600,0);
     camera.lookAt(0,0,0);
+
     css2dRenderer = new CSS2DRenderer(); // Initialize CSS2DRenderer
-     css2dRenderer.setSize(window.innerWidth, window.innerHeight);
-     css2dRenderer.domElement.style.position = 'absolute';
-     css2dRenderer.domElement.style.top = '9%';
-     // Append CSS2DRenderer's DOM element to the container holding the canvas
-    //  canvasRef.current.parentElement.appendChild(renderer.domElement); 
-    //  canvasRef.current.parentElement.appendChild(css2dRenderer.domElement); 
-    // Append the WebGLRenderer (renderer.domElement) to the document body
+    css2dRenderer.setSize(innerWidth , innerHeight );
+    css2dRenderer.domElement.style.position = 'absolute';
+    css2dRenderer.domElement.style.top = '0';    
+    document.body.appendChild(css2dRenderer.domElement);
 
-// Append the CSS2DRenderer (css2dRenderer.domElement) to the document body
-document.body.appendChild(css2dRenderer.domElement);
-document.body.appendChild(renderer.domElement);
-
-
-     controls = new OrbitControls(camera,renderer.domElement);
-     controls = new OrbitControls(camera,css2dRenderer.domElement);
-
+    controls = new OrbitControls(camera,renderer.domElement);
+    controls = new OrbitControls(camera,css2dRenderer.domElement);
     controls.enableDamping = true;
     controls.screenSpacePanning = false;
     controls.minDistance = 1;
@@ -176,12 +175,11 @@ document.body.appendChild(renderer.domElement);
     mouse = new THREE.Vector2();
 
      // Set up initial view mode
-     switchViewMode(viewMode);
+    switchViewMode(viewMode);
 
     enableInteractions();
 
     reinstantiateTiles();
-
 
     onWindowResize();
     window.addEventListener('resize', onWindowResize, false);
@@ -224,10 +222,9 @@ document.body.appendChild(renderer.domElement);
     }
   };
 
-
-  const createLabels = () => {
+const createLabels = () => {
  
-table.forEach((item) => {
+  table.forEach((item) => {
   const x = parseFloat(item.x);
         const y = parseFloat(item.y);
         const z = parseFloat(item.z);
@@ -252,13 +249,9 @@ const vector = new THREE.Vector3(newX,newY,newZ)
   const labelDiv = document.createElement('div');
   labelDiv.className = 'label';
   labelDiv.innerHTML = '<i class="fa-solid fa-circle-dot" style="font-size: 5px"></i>';
-  // labelDiv.text = 'Tag 1'
   labelDiv.style.color = '#ffffff';
   const labelObject = new CSS2DObject(labelDiv);
-  // Set position of the label in world coordinates
-  // const position = new THREE.Vector3(newX, newY, newZ);
   labelObject.position.set(newX,newY,newZ);
-
   // Add label to the scene
   scene.add(labelObject); 
 });
@@ -280,8 +273,8 @@ const vector = new THREE.Vector3(newX,newY,newZ)
   };
 
   const onMouseMove = (event) => {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    mouse.x = (event.clientX / innerWidth ) * 2 - 1;
+    mouse.y = -(event.clientY / innerHeight ) * 2 + 1;
    
  
   };
@@ -329,10 +322,12 @@ const vector = new THREE.Vector3(newX,newY,newZ)
   };
 
   const onWindowResize = () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+     // Set the new size of the canvas
+    camera.aspect = innerWidth  / innerHeight ;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(innerWidth , innerHeight );
+    // renderer.setPixelRatio(window.devicePixelRatio);
+    css2dRenderer.setSize(innerWidth , innerHeight );
   };
   const render = () => {
     tiles.setCamera(camera);
@@ -340,14 +335,11 @@ const vector = new THREE.Vector3(newX,newY,newZ)
   
     camera.updateMatrixWorld();
     tiles.update();
-  
- 
-      css2dRenderer.render(scene, camera);
-      renderer.render(scene, camera);
 
-   }
-    
-  
+    css2dRenderer.render(scene, camera);
+    renderer.render(scene, camera);
+
+   }  
 
   const animate = () => {
     requestAnimationFrame(animate);
@@ -372,33 +364,6 @@ const vector = new THREE.Vector3(newX,newY,newZ)
     css2dRenderer.domElement.removeEventListener('mousemove', onMouseMove);
     css2dRenderer.domElement.removeEventListener('click', onMouseClick);
   };
-
-  const handleCreateBox = () => {
-    if(scenes){
-      console.log("enter handle create box")
-// Create BoxGeometry
-const geometry = new THREE.BoxGeometry(size[0], size[1], size[2]);
-console.log(size[0], size[1], size[2])
-
-// Create MeshBasicMaterial
-const material = new THREE.MeshBasicMaterial({ color: color }); // Green color
-console.log(position[0], position[1], position[2])
-
-// Create Mesh
-const box = new THREE.Mesh(geometry, material);
-// Position the cube at the specified coordinates
-box.position.set(position[0], position[1], position[2]);
-
-
-// Add the box to the scene
-scene.add(box);
-    }
-    else {
-      console.error('Scene is not initialized');
-    }
-    
-  };
-
 
   useEffect(() => {  
   // getalloffset();
@@ -524,9 +489,8 @@ scene.add(box);
 
   return (
     <>
-    <div>
-      <div>
-        {/* Buttons to switch between plan view and side view */}
+    <div className="row">
+      {/* <div className="col-lg-5">
         <button onClick={() => switchViewMode('plan')}>Plan View</button>
       <button onClick={() => switchViewMode('side')}>Side View</button>
       <select onChange={handleAssetSelection}>
@@ -535,15 +499,11 @@ scene.add(box);
                     <option key={asset.id} value={asset.id}>{asset.name}-{asset.id}</option>
                 ))}
             </select>
-            </div>
-     
-      <button className="btn btn-primary" sx={{ width: '100%' }} data-bs-toggle="modal" data-bs-target="#staticBackdrop" >
-        Create Box
-      </button>
-            <div >
-                <canvas ref={canvasRef}></canvas>
-                {/* Additional CSS-rendered content goes here */}
-            </div>
+      </div>  */}
+      <div className="col-lg-1"></div>        
+      <div className="col-lg-6">
+      <canvas  ref={canvasRef}></canvas>
+      </div>
       {/* <label>Change Color</label>
       <input
         type="color"
@@ -551,53 +511,7 @@ scene.add(box);
         onChange={onColorInputChange} 
       /> */}     
     </div>
-     {/*modal for create box */}
- <div class="modal fade mt-5" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true"> 
-
-<div className="modal-dialog">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h1 class="modal-title fs-5" id="staticBackdropLabel">Create Box</h1>
-      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-    </div>
-    <div class="modal-body">
-   <Card className="shadow border rounded p-2 mt-3">
-      
-  <Form>
-  <Row>
-  <FloatingLabel controlId="floatingInputSize" label="Size" className="mb-3 col-lg-6">
-  <Form.Control type="text" placeholder="Size" name="Size" value={size.join(',')}
-          onChange={(e) => setSize(e.target.value.split(',').map(parseFloat))} />
-  </FloatingLabel>
-
-
-  <FloatingLabel controlId="floatingInputPosition" label="Position"  className="mb-3 col-lg-6">
-  <Form.Control type="text" placeholder="Position" name="Position" value={position.join(',')} onChange={(e) => setPosition(e.target.value.split(',').map(parseFloat))}/>
-  </FloatingLabel>
-
-  <FloatingLabel controlId="floatingInputColor" label="Color"  className="mb-3 col-lg-6">
-  <Form.Control  placeholder="Color" name="Color"
-       type="color" value={color} onChange={(e) => setColor(e.target.value)} /> 
-  </FloatingLabel>
-
-  <FloatingLabel controlId="floatingInputName" label="Name"  className="mb-3 col-lg-6">
-  <Form.Control type="text" placeholder="Name" name="Name" value={name} onChange={(e) => setName(e.target.value)}/>
-  </FloatingLabel>
-
-
-  </Row>
-
-  </Form>
-
-  </Card>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
-      <button type="button" onClick={handleCreateBox}  class="btn btn-success">Create</button>
-    </div>
-  </div>
-</div>
-</div> 
+  
 
     </>
   );
