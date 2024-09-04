@@ -34,8 +34,6 @@ function Main() {
   const drawerWidth = 240;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assetList, setAssetList] = useState([]);
-  const [cubes, setCubes] = useState([]);
-  const [cubeId, setCubeId] = useState(0);
   const [size, setSize] = useState([1, 1, 1]);
   const [position, setPosition] = useState([0, 0, 0]);
   const [color, setColor] = useState('#00ff00');

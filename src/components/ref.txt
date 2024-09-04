@@ -1,0 +1,454 @@
+import React, { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { openDB } from "idb";
+
+function FBXViewer() {
+  const mountRef = useRef(null);
+  const sceneRef = useRef(new THREE.Scene());
+  const cameraRef = useRef(new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000));
+  const rendererRef = useRef(new THREE.WebGLRenderer({ antialias: true }));
+  const controlsRef = useRef(null);
+  const [db, setDb] = useState(null);
+  const cumulativeBoundingBoxRef = useRef(new THREE.Box3());
+  const cumulativeBoundingBoxHelperRef = useRef(null);
+  const loadedMeshesRef = useRef([]);
+  const frustumRef = useRef(new THREE.Frustum());
+  const frustumMatrixRef = useRef(new THREE.Matrix4());
+  const flyModeCameraPosition = useRef(new THREE.Vector3());
+  const orbitControlsTargets = useRef(new THREE.Vector3()); 
+  const mouse = useRef({ x: 0, y: 0 });
+  const isMouseDown = useRef(false);
+  const isPanning = useRef(false);
+  const isZooming = useRef(false);
+  const lastMouseMovement = useRef({ x: 0, y: 0 });
+  const [flySpeed, setFlySpeed] = useState(1); 
+  const [flyrotationSpeed, setflyrotationSpeed] = useState(1); 
+  const [tileSize,setTileSize] = useState();
+  const [workers, setWorkers] = useState({
+    priority1: null,
+    priority2: null,
+    priority3: null
+  });
+
+  const meshQueues = useRef({
+    priority1: [],
+    priority2: [],
+    priority3: [],
+    unloaded: []
+  });
+
+  useEffect(() => {
+       
+    enablefycontrols();
+
+// Cleanup function to remove event listeners
+return () => {
+    disableflycontrols();
+};
+}, [ flySpeed, flyrotationSpeed]);
+
+  useEffect(() => {
+    const initDB = async () => {
+      const database = await openDB("fbx-files-db", 1, {
+        upgrade(db) {
+          if (!db.objectStoreNames.contains("files")) {
+            db.createObjectStore("files", { keyPath: "id", autoIncrement: true });
+          }
+        },
+      });
+      setDb(database);
+    };
+
+    initDB();
+
+    rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+    mountRef.current.appendChild(rendererRef.current.domElement);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    sceneRef.current.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(0, 1, 0);
+    sceneRef.current.add(directionalLight);
+
+    // controlsRef.current = new OrbitControls(cameraRef.current, rendererRef.current.domElement);
+    // controlsRef.current.enableDamping = true;
+    // controlsRef.current.dampingFactor = 0.1;
+
+    animate();
+    const newWorkers = {
+      priority1: new Worker(new URL("./modelLoader.worker.js", import.meta.url), { type: "module" }),
+      priority2: new Worker(new URL("./modelLoader.worker.js", import.meta.url), { type: "module" }),
+      priority3: new Worker(new URL("./modelLoader.worker.js", import.meta.url), { type: "module" }),
+      priority4: new Worker(new URL("./modelLoader.worker.js", import.meta.url), { type: "module" })
+    };
+
+    setWorkers(newWorkers);
+
+    // Set up message handlers for workers
+    Object.entries(newWorkers).forEach(([priority, worker]) => {
+      worker.onmessage = (e) => handleWorkerMessage(e, priority);
+    });
+    return () => {
+      mountRef.current.removeChild(rendererRef.current.domElement);
+      // controlsRef.current.dispose();
+      Object.values(newWorkers).forEach(worker => worker.terminate());
+    
+    };
+  }, []);
+
+  const handleWorkerMessage = (e, priority) => {
+    const { type, data } = e.data;
+    if (type === 'meshLoaded') {
+      // Handle loaded mesh
+      const mesh = loadedMeshesRef.current.find(m => m.id === data.id);
+      if (mesh) {
+        mesh.visible = true;
+        updateMeshPriority(mesh);
+      }
+    }
+  };
+
+  const updateMeshPriority = (mesh) => {
+    const distance = mesh.position.distanceTo(cameraRef.current.position);
+    let newPriority;
+
+    if (distance < 10) newPriority = 'priority1';
+    else if (distance < 50) newPriority = 'priority2';
+    else if (distance < 100) newPriority = 'priority3';
+    else newPriority = 'unloaded';
+
+    // Move mesh to appropriate queue
+    Object.entries(meshQueues.current).forEach(([priority, queue]) => {
+      const index = queue.findIndex(m => m.id === mesh.id);
+      if (index !== -1) {
+        queue.splice(index, 1);
+      }
+    });
+
+    meshQueues.current[newPriority].push(mesh);
+  };
+
+
+  const loadModel = async (file) => {
+    const loader = new FBXLoader();
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      const arrayBuffer = event.target.result;
+
+      if (db) {
+        await db.put("files", { id: file.name, data: arrayBuffer });
+        console.log(`Stored file: ${file.name}`);
+        loadModelFromDB(db, file.name);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
+  const loadModelFromDB = async (database, fileName) => {
+    const loader = new FBXLoader();
+    const tx = database.transaction("files", "readonly");
+    const store = tx.objectStore("files");
+    const file = await store.get(fileName);
+  
+    if (file) {
+      const arrayBuffer = file.data;
+  
+      loader.load(
+        URL.createObjectURL(new Blob([arrayBuffer])),
+        (object) => {
+          object.traverse((child) => {
+            if (child.isMesh) {
+              child.visible = false;
+              // Instead of reassigning `id`, store a custom unique ID in userData or another custom property
+              child.userData.customID = THREE.MathUtils.generateUUID();
+              loadedMeshesRef.current.push(child);
+              meshQueues.current.unloaded.push(child);
+            }
+          });
+          updateMeshPriorities();
+          sceneRef.current.add(object);
+          createBoundingBox(object);
+          updateCumulativeBoundingBox();
+          adjustCamera();
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading model:", error);
+        }
+      );
+    }
+  };
+  
+
+  const updateMeshPriorities = () => {
+    loadedMeshesRef.current.forEach(updateMeshPriority);
+    processQueues();
+  };
+
+  const processQueues = () => {
+    Object.entries(meshQueues.current).forEach(([priority, queue]) => {
+      if (priority !== 'unloaded' && queue.length > 0) {
+        const mesh = queue.shift();
+        workers[priority].postMessage({ type: 'loadMesh', data: { id: mesh.id, priority } });
+      }
+    });
+  };
+
+  const createBoundingBox = (object) => {
+    const box = new THREE.Box3().setFromObject(object);
+    // const helper = new THREE.Box3Helper(box, 0xffff00);
+    // sceneRef.current.add(helper);
+  };
+
+  const updateCumulativeBoundingBox = () => {
+    cumulativeBoundingBoxRef.current.makeEmpty();
+    loadedMeshesRef.current.forEach((mesh) => {
+      cumulativeBoundingBoxRef.current.expandByObject(mesh);
+    });
+
+    if (cumulativeBoundingBoxHelperRef.current) {
+      sceneRef.current.remove(cumulativeBoundingBoxHelperRef.current);
+    }
+
+    cumulativeBoundingBoxHelperRef.current = new THREE.Box3Helper(cumulativeBoundingBoxRef.current, 0xff0000);
+    const size = new THREE.Vector3();
+    cumulativeBoundingBoxRef.current.getSize(size);
+    const diagonalDistance = size.length();
+    setTileSize(diagonalDistance)
+    sceneRef.current.add(cumulativeBoundingBoxHelperRef.current);
+  };
+
+  const adjustCamera = () => {
+    const box = cumulativeBoundingBoxRef.current;
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = cameraRef.current.fov * (Math.PI / 180);
+    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+    cameraZ *= 1.5; // Zoom out a little so object fits in view
+
+    cameraRef.current.position.set(center.x, center.y, center.z + cameraZ);
+    // cameraRef.current.lookAt(center);
+    // controlsRef.current.target.copy(center);
+    // controlsRef.current.update();
+  };
+
+  const updateVisibleMeshes = () => {
+    frustumMatrixRef.current.multiplyMatrices(cameraRef.current.projectionMatrix, cameraRef.current.matrixWorldInverse);
+    frustumRef.current.setFromProjectionMatrix(frustumMatrixRef.current);
+
+    loadedMeshesRef.current.forEach((mesh) => {
+      if (frustumRef.current.intersectsObject(mesh)) {
+        mesh.visible = true;
+      } else {
+        mesh.visible = false;
+      }
+    });
+    updateMeshPriorities();
+  };
+
+  const onFileChange = (event) => {
+    const files = event.target.files;
+    if (files.length > 0) {
+      Array.from(files).forEach((file) => {
+        loadModel(file);
+      });
+    }
+  };
+  
+
+  const animate = () => {
+    requestAnimationFrame(animate);
+    // controlsRef.current.update();
+      updateVisibleMeshes();
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+  };
+
+  let continueTranslation = false;
+  let continueRotation = false;
+  let translationDirection = 0;
+  let rotationDirection = 0;
+  let translationSpeed = 5; // Initial translation speed
+  let rotationSpeed = 0.001; // Initial rotation speed
+// Define sensitivity constants
+  const horizontalSensitivity = 1.1; // Adjust as needed
+  const verticalSensitivity = 1.1; // Adjust as needed
+
+  // mouse events functions on fly control
+
+  const handleMouseDown = (event) => {
+		// event.preventDefault();
+		const mouseEvent = event.touches ? event.touches[0] : event;
+        if (mouseEvent.button === 0) { // Left mouse button pressed
+			
+            isMouseDown.current = true;
+            mouse.current.x = mouseEvent.clientX;
+            mouse.current.y = mouseEvent.clientY;
+            isZooming.current = true;
+			continueTranslation = true; // Enable automatic translation
+			continueRotation = true; // Enable automatic rotation
+			translationDirection = lastMouseMovement.current.y > 0 ? 1 : -1; // Set translation direction based on last mouse movement
+			rotationDirection = lastMouseMovement.current.x > 0 ? 1 : -1; // Set rotation direction based on last mouse movement
+        } else if (event.button === 1) { // Middle mouse button pressed
+			console.log("middlebutton pressed")
+            isPanning.current = true;
+			continueTranslation = true; // Enable automatic translation
+            mouse.current.x = mouseEvent.clientX;
+            mouse.current.y = mouseEvent.clientY;
+        }
+    };
+
+    const handleMouseUp = () => {
+        isMouseDown.current = false;
+        isPanning.current = false;
+        isZooming.current = false;    
+		lastMouseMovement.current = { x: 0, y: 0 };
+    };
+
+	const handleMouseMove = (event) => {
+		event.preventDefault();
+
+		const mouseEvent = event.touches ? event.touches[0] : event;
+		if (!isMouseDown.current && !isPanning.current && !isZooming.current) return;
+	
+		const movementX = mouseEvent.clientX - mouse.current.x;
+		const movementY = mouseEvent.clientY - mouse.current.y;
+	
+		lastMouseMovement.current = { x: movementX, y: movementY };
+		if (isMouseDown.current) { // Left mouse button clicked
+			const isHorizontal = Math.abs(movementX) > Math.abs(movementY);
+			if (isHorizontal) { // Horizontal movement, rotate around Y axis
+				continueCameraMovement(); 
+			} else  { // Vertical movement, forward/backward
+				continueCameraMovement(); // Adjust with factors
+			}
+		} else if (isPanning.current) { // Middle mouse button clicked
+
+			continueCameraMovement(movementX, movementY); // Adjust with factors
+		}
+	
+		mouse.current.x = mouseEvent.clientX;
+		mouse.current.y = mouseEvent.clientY;
+	};
+	
+	const handleWheel = (event) => {
+	const rotationAngle = -event.deltaY * 0.001;
+
+	// Get the camera's up vector
+    let cameraUp = new THREE.Vector3(1, 0, 0); // Assuming Y-axis is up
+    cameraUp.applyQuaternion(cameraRef.current.quaternion);
+
+    // Create a quaternion representing the rotation around the camera's up vector
+    let quaternion = new THREE.Quaternion().setFromAxisAngle(cameraUp, rotationAngle);
+
+    cameraRef.current.applyQuaternion(quaternion);
+    storeCameraPosition(); // Assuming this function stores camera position
+
+    };
+
+    const continueCameraMovement = () => {
+		const adjustedTranslationSpeed = flySpeed * translationSpeed ;
+		if (isMouseDown.current && (continueTranslation || continueRotation)) {
+			
+				requestAnimationFrame(continueCameraMovement);
+				const movementX = lastMouseMovement.current.x;
+				const movementY = lastMouseMovement.current.y;
+				const tileSizeFactor =10; // Implement this function to calculate the factor based on tile size
+				const isHorizontal = Math.abs(movementX) > Math.abs(movementY);
+				if(isHorizontal){
+					const rotationAngle = -movementX * rotationSpeed * horizontalSensitivity * flyrotationSpeed *tileSizeFactor;
+
+					// Get the camera's up vector
+					let cameraUp = cameraRef.current.up.clone().normalize();
+					
+					// Create a quaternion representing the rotation around the camera's up vector
+					let quaternion = new THREE.Quaternion().setFromAxisAngle(cameraUp, rotationAngle);
+					
+					cameraRef.current.applyQuaternion(quaternion);
+					storeCameraPosition();
+
+				}
+				else {
+					const zoomSpeed = movementY * 0.01; // Adjust zoom speed based on last recorded mouse movement
+
+					const forwardDirection = new THREE.Vector3(0, 0, 1).applyQuaternion(cameraRef.current.quaternion);
+				// Move the camera forward/backward along its local forward direction
+				cameraRef.current.position.add(forwardDirection.multiplyScalar(zoomSpeed * adjustedTranslationSpeed * tileSizeFactor));
+				storeCameraPosition();
+
+				}			
+		}
+		
+		else if (isPanning.current && (continueTranslation)) {
+			requestAnimationFrame(continueCameraMovement);
+			const tileSizeFactor = 0.1;
+			const movementY = lastMouseMovement.current.y;
+			const movementX = lastMouseMovement.current.x;
+        const adjustedHorizontalSensitivity = horizontalSensitivity * tileSizeFactor*0.001;
+        const adjustedVerticalSensitivity = verticalSensitivity * tileSizeFactor*0.001;
+
+			// Calculate movement speed based on mouse movement and sensitivity
+			const moveSpeedX = movementX * adjustedHorizontalSensitivity;
+			const moveSpeedY = movementY * adjustedVerticalSensitivity;
+		   
+			const isHorizontal = Math.abs(movementX) > Math.abs(movementY);
+			const isVertical = Math.abs(movementY) > Math.abs(movementX);
+		
+			if (isHorizontal) {
+				// Move the camera along its local x axis
+				cameraRef.current.translateX(moveSpeedX);
+				storeCameraPosition()
+			} else if (isVertical) {
+				// Move the camera along its local y axis
+				cameraRef.current.translateY(-moveSpeedY);
+				storeCameraPosition()
+
+			}
+
+
+		}
+	};
+	const storeCameraPosition = () => {
+    const { position,} = cameraRef.current;
+    flyModeCameraPosition.current.copy(position);
+    // console.log('Camera position stored:', position);
+    // const { position, quaternion } = cameraRef.current;
+    // flyModeCameraPosition.current.copy(position);
+    // orbitControlsTargets.current.copy(controlsRef.current.target);
+    // // Optionally, you can save this state to a database or local storage.
+    // console.log('Camera position stored:', position);
+	};
+
+  // enablefycontrols
+const enablefycontrols=()=>{
+	document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove);
+    
+    // document.addEventListener('wheel', handleWheel);
+}
+// disableflycontrols
+const disableflycontrols=()=>{
+	document.removeEventListener('mousedown', handleMouseDown);
+    document.removeEventListener('mouseup', handleMouseUp);
+    document.removeEventListener('mousemove', handleMouseMove);    
+    // document.removeEventListener('wheel', handleWheel);
+}
+
+  return (
+    <div className="main">
+      <div className="canvas-container" style={{position:'relative',width:'100%',height:'100vh',overflow:'hidden'}}>
+        <input style={{position:'absolute',top:'10px',left:'10px'}} className="button" type="file" multiple onChange={onFileChange} accept=".fbx" />
+        <div ref={mountRef} style={{ width: "100%", height: "100vh" }}></div>
+      </div>
+    </div>
+  );
+}
+
+export default FBXViewer;

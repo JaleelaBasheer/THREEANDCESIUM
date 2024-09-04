@@ -2,11 +2,11 @@ import React , { useRef, useEffect, useState } from 'react'
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { FlyControls } from 'three/examples/jsm/controls/FlyControls';
 import { CSS2DObject , CSS2DRenderer} from 'three/examples/jsm/renderers/CSS2DRenderer';
 import Label from './Label';
 import { Box3 } from 'three';
 import { BoxGeometry, MeshBasicMaterial } from 'three';
+import { FlyControls } from 'three/examples/jsm/controls/FlyControls';
 
 
 function ImageUpload() {
@@ -28,23 +28,16 @@ function ImageUpload() {
   const [selectedMeshBoundingBoxCenter, setSelectedMeshBoundingBoxCenter] = useState(null);
   const [objectCenter, setobjectCenter]= useState([]);
   const [meshcenter,setmeshcenter] = useState([]);
+  const [crossMarks, setCrossMarks] = useState([]);
 
   // Update the state to store object-mesh associations
   const [objectMeshAssociations, setObjectMeshAssociations] = useState([]);
   const [objectAssociations, setObjectAssociations] = useState([]);
 
-  const [table ,setTable] = useState([
-    {x:"90.00",y:"279.40",z:"31.75"},
-    {x:"68",y:"296.50",z:"40.48"},
-    {x:"100",y:"286.10",z:"	-50.52"},
-    {x:"95.40",y:"294",z:"25.24"},
-    { x:"131.34", y:	"272.16",z:	"52.36"},
-   
-  ])
-
   let cumulativeBoundingBox = new THREE.Box3(); // Initialize cumulative bounding box
   let cumulativeBoundingBoxObject = new THREE.Box3(); // Initialize cumulative bounding box
-
+  const[ measuring,setmeasuring] = useState(false);
+  let clickPoints = [];
   const loadFBXFiles = (files) => {
     if (!files) return;
     const fbxLoader = new FBXLoader();
@@ -55,11 +48,14 @@ function ImageUpload() {
     const loadedOffsetsobject = []; // New array to store offsets
     const fileCenter = [];
     const singlemeshcenter = [];
+    
 
     
 
     for (let i = 0; i < files.length; i++) {    
       const file = files[i];
+      console.log(file)
+      console.log(URL.createObjectURL(file));
 
       fbxLoader.load(URL.createObjectURL(file),(object) => {
 
@@ -192,6 +188,149 @@ const offsetObject = center.clone().sub(cumulativeCenterObject);
      
   };
 
+    const loadfilesfromfolder = () => {
+      const fbxLoader = new FBXLoader();
+  
+      const loadedLabels = [];
+      const loadedObjects = [];
+      const loadedOffsets = []; // New array to store offsets
+      const loadedOffsetsobject = []; // New array to store offsets
+      const fileCenter = [];
+      const singlemeshcenter = [];
+        const filename = 'PL-202002_HO.fbx'
+  
+        fbxLoader.load(`egModel/${filename}`,(object) => {
+  
+          console.log('Loaded FBX object:', object);
+           // Push the loaded object and its filename into the array
+      loadedObjects.push({ object, filename: filename });
+  
+          object.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+  
+              // Store the association between object name and its mesh
+              setObjectMeshAssociations((prevAssociations) => [
+                ...prevAssociations,
+                { objectName: filename, mesh: child }
+            ]);
+  
+                // Calculate bounding box for each mesh
+                const boundingBox = calculateBoundingBox(child);
+  
+                // Log bounding box details for each mesh
+                // console.log(`File ${i + 1} - Mesh Bounding Box Min Coordinates:`, boundingBox.min.toArray());
+                // console.log(`File ${i + 1} - Mesh Bounding Box Max Coordinates:`, boundingBox.max.toArray());
+  
+                // Calculate center of the bounding box for each mesh
+                const center = new THREE.Vector3();
+               const meshescenter = boundingBox.getCenter(center);
+               singlemeshcenter.push(meshescenter)
+                // console.log(`File ${i + 1} - Mesh Bounding Box Center:`, center.toArray());
+                 // Update cumulative bounding box
+               cumulativeBoundingBox.union(boundingBox);
+                      // Accumulate differences in centers
+         cumulativeCenter.subVectors(cumulativeBoundingBox.getCenter(new THREE.Vector3()), center);
+         // Log cumulative bounding box details after each file
+         const minCoordinates = cumulativeBoundingBox.min.toArray();
+         const maxCoordinates = cumulativeBoundingBox.max.toArray();
+            //  console.log('Cumulative Bounding Box Min Coordinates:',  minCoordinates);
+            //  console.log('Cumulative Bounding Box Max Coordinates:', maxCoordinates);
+   
+             
+               // Calculate the center
+               const centerX = (minCoordinates[0] + maxCoordinates[0]) / 2;
+         const centerY = (minCoordinates[1] + maxCoordinates[1]) / 2;
+         const centerZ = (minCoordinates[2] + maxCoordinates[2]) / 2;
+         
+         const cumulativecenter = new THREE.Vector3(centerX, centerY, centerZ);
+         
+        //  console.log('Cumulative Bounding Box Center:', cumulativecenter.toArray())
+         setCumulativeCenter(new THREE.Vector3(centerX, centerY, centerZ));
+   
+          // Calculate the difference between final cumulative center and individual bounding box center
+           const offset = boundingBox.getCenter(new THREE.Vector3()).sub(cumulativecenter);
+   
+           // Log or use the offset as needed
+          //  console.log(`File ${i + 1} - Offset:`, offset.toArray());
+   
+            // Store the offset for later use
+         loadedOffsets.push(offset);
+   
+           // Store the offset for later use
+           offsets.push(offset);
+            }
+  
+          })
+        
+        // Calculate bounding box for the loaded object
+        const boundingBoxobject = calculateBoundingBox(object);
+  
+        
+        // Add label to each object
+        // const label = createLabel(`Tag${i + 1}`, object);
+  
+        // Log bounding box details
+        console.log(`File - Bounding Box Min Coordinates:`, boundingBoxobject.min.toArray());
+        console.log(`File  - Bounding Box Max Coordinates:`, boundingBoxobject.max.toArray());
+  
+        // Calculate center of the bounding box
+        const center = new THREE.Vector3();
+       const objectfilecenter= boundingBoxobject.getCenter(center);
+        console.log(`File - Bounding Box Center:`, objectfilecenter.toArray());
+        
+       
+        // Update cumulative bounding box
+        // let cumulative= cumulativeBoundingBox.union(boundingBox);
+         // Calculate the difference between final cumulative center and individual 
+         cumulativeBoundingBoxObject.union(boundingBoxobject);
+        // Update cumulative bounding box for objects
+          const cumulativeCenterObject = cumulativeBoundingBoxObject.getCenter(new THREE.Vector3());
+         // Calculate the offset between object center and cumulative center
+  const offsetObject = center.clone().sub(cumulativeCenterObject);
+  
+  // Log or use the offset as needed
+  // console.log(`File ${i + 1} - Offset Object:`, offsetObject.toArray());
+  
+     scene.add(object);
+     fileCenter.push(objectfilecenter)
+     loadedOffsetsobject.push(offsetObject);
+     offsetsobject.push(offsetObject);
+  
+        updateCameraAndControls();
+        scene.rotation.x = -Math.PI / 2;
+
+  
+    // Add label to the scene
+    // object.add(label);
+    // label.visible = showLabels;
+    // loadedLabels.push(label);          
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+      enableInteractions()         
+          },
+          undefined,
+          (error) => {
+            console.error('Error loading FBX:', error);
+          }
+        );
+       
+      
+  // Update the offsetTable state with the new offsets
+      setObjectAssociations(loadedObjects)
+      setOffsetTable(loadedOffsets);
+      setobjectoffsetTable(loadedOffsetsobject);
+      setmeshcenter(singlemeshcenter);
+      setobjectCenter(fileCenter)
+      setLabels(loadedLabels); // Update the labels state
+      initControls();
+      initLight();
+      onWindowResize();
+      window.addEventListener('resize', onWindowResize, false);
+      animate();
+      
+       
+    };
+
  
   const createLabel = (text, object) => {
     const labelDiv = document.createElement('div');
@@ -211,6 +350,7 @@ const offsetObject = center.clone().sub(cumulativeCenterObject);
   
   const calculateBoundingBox = (object) => {
     const boundingBox = new THREE.Box3().setFromObject(object);
+    
    
     return boundingBox;
   };
@@ -221,7 +361,7 @@ const offsetObject = center.clone().sub(cumulativeCenterObject);
     const distance = Math.max(size.x, size.y, size.z) * 2;
 
     camera.position.copy(center);
-    camera.position.z += distance;
+    camera.position.y += distance;
 
     if (controls) {
       controls.target.copy(center);
@@ -240,11 +380,13 @@ const fitCameraToBoundingBox = (object) => {
 
 
   const initControls = () => {
-    controls = new OrbitControls(camera, renderer.domElement);
+    controls = new OrbitControls(camera, renderer.domElement); 
     controls.enableDamping = true; // Smooth camera movements
     controls.screenSpacePanning = false;
     controls.minDistance = 1;
     controls.maxDistance = 2000;
+
+
   };
 
   const initLight = () => {
@@ -285,53 +427,7 @@ const fitCameraToBoundingBox = (object) => {
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   };
 
-  // const onMouseClick = (event) => {
-  //   raycaster = new THREE.Raycaster();
-  //   mouse = new THREE.Vector2();
-  //   raycaster.setFromCamera(mouse, camera);
-  //   const intersects = raycaster.intersectObjects(scene.children, true);
-
-  //   if (intersects.length > 0) {
-  //     const clickedObject = intersects[0].object;
-
-  //     if (event.button === 0) {
-  //       console.log('Left-click');
-  //       if (selectedObject) {
-  //         selectedObject.material.color.set(0xffffff);
-  //       }
-
-  //       selectedObject = clickedObject;
-  //       selectedObject.material.color.set(highlightColor);
-  //       // Log coordinates of the clicked object in world space
-  //     const worldPosition = new THREE.Vector3();
-  //     selectedObject.getWorldPosition(worldPosition);
-  //     console.log("World Coordinates of Clicked Object:", worldPosition);
-
-  //   } 
-  //   if (event.button === 2) {
-  //     console.log('Right-click');
-  //     setContextMenuPosition({ x: event.clientX, y: event.clientY });
-
-  //     raycaster.setFromCamera({ x: mouse.x, y: mouse.y + 0.1 }, camera);
-
-  //     const intersectsAbove = raycaster.intersectObjects(scene.children, true);
-
-  //     if (intersectsAbove.length > 0) {
-  //       selectedObject = intersectsAbove[0].object;
-  //     } else {
-  //       setContextMenuPosition({ x: 0, y: 0 });
-  //       selectedObject = null;
-  //     }
-  //   }
-  //   }
-  //   else {
-  //     if (selectedObject && event.button === 0) {
-  //       console.log('Clicked outside of any object');
-  //       selectedObject.material.color.set(0xffffff);
-  //       selectedObject = null;
-  //     }
-  //   }
-  // };
+  
   const handleAddCommentButton = () => {
     const labelText = 'Label for ';
     const existingComment = labels.find(label => label.text === labelText)?.comment || '';
@@ -361,6 +457,47 @@ const fitCameraToBoundingBox = (object) => {
   };
 
   const onMouseLeftClick = (event) => {
+    if (!measuring) {
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+  
+      if (intersects.length > 0) {
+        const clickedPoint = intersects[0].point;
+      
+        addCrossMark(clickedPoint);
+        console.log(`Clicked Point Coordinates (x, y, z): ${clickedPoint.x.toFixed(2)}, ${clickedPoint.y.toFixed(2)}, ${clickedPoint.z.toFixed(2)}`);
+  
+        clickPoints.push(clickedPoint);
+  
+        if (clickPoints.length === 2) {
+          const point1 = clickPoints[0];
+          const point2 = clickPoints[1];
+          const distance = clickPoints[0].distanceTo(clickPoints[1]);
+          console.log(`Distance between points: ${distance.toFixed(2)}`);
+  
+          const diffX = point2.x - point1.x;
+        const diffY = point2.y - point1.y;
+        const diffZ = point2.z - point1.z;
+
+        console.log(`Difference in X: ${diffX.toFixed(2)}`);
+        console.log(`Difference in Y: ${diffY.toFixed(2)}`);
+        console.log(`Difference in Z: ${diffZ.toFixed(2)}`);
+
+        // Calculate horizontal angle
+        const horizontalAngle = Math.atan2(diffY, diffX) * (180 / Math.PI);
+        console.log(`Horizontal Angle: ${horizontalAngle.toFixed(2)} degrees`);
+
+        // Calculate vertical angle
+        const distanceXY = Math.sqrt(diffX * diffX + diffY * diffY); // Distance in the XY plane
+        const verticalAngle = Math.atan2(diffZ, distanceXY) * (180 / Math.PI);
+        console.log(`Vertical Angle: ${verticalAngle.toFixed(2)} degrees`);
+          // Reset measurement state
+          setmeasuring(false);
+          clickPoints = [];
+          clearCrossMarks();
+        }
+      }
+    }
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(scene.children, true);
 
@@ -390,6 +527,29 @@ const fitCameraToBoundingBox = (object) => {
       setContextMenuPosition({ x: 0, y: 0 });
       handleDeselectObject();
     }
+  };
+  const addCrossMark = (point) => {
+    const crossMark = createCrossMark();
+    crossMark.position.copy(point);
+    scene.add(crossMark);
+    setCrossMarks((prevCrossMarks) => [...prevCrossMarks, crossMark]);
+  };
+
+  const createCrossMark = () => {
+    const crossSize = 0.1;
+    const crossShape = new THREE.Shape();
+    crossShape.moveTo(-crossSize, 0);
+    crossShape.lineTo(crossSize, 0);
+    crossShape.moveTo(0, -crossSize);
+    crossShape.lineTo(0, crossSize);
+    const geometry = new THREE.BufferGeometry().setFromPoints(crossShape.getPoints(4));
+    const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
+    return new THREE.LineSegments(geometry, material);
+  };
+
+  const clearCrossMarks = () => {
+    crossMarks.forEach((crossMark) => scene.remove(crossMark));
+    setCrossMarks([]);
   };
 
   const handleObjectSelection = (clickedObject) => {
@@ -469,6 +629,28 @@ const fitCameraToBoundingBox = (object) => {
     console.log(`Comment for "${labelText}":`, newComment);
   };
 
+  const toggleMeasurementMode = () => {
+    setmeasuring(!measuring);
+    if (measuring) {
+      console.log('Measurement mode activated. Click two points in the scene.');
+    } else {
+      console.log('Measurement mode deactivated.');
+      clickPoints = [];
+    }
+  };
+
+  useEffect(() => {
+    if (renderer && renderer.domElement) {
+      renderer.domElement.addEventListener('mousedown', onMouseDown);
+      renderer.domElement.addEventListener('mousemove', onMouseMove);
+
+      return () => {
+        renderer.domElement.removeEventListener('mousedown', onMouseDown);
+        renderer.domElement.removeEventListener('mousemove', onMouseMove);
+      };
+    }
+  }, [renderer]);
+
   const renderLabels = () => {
     return labels.map((label, index) => (
       <Label
@@ -488,27 +670,10 @@ const fitCameraToBoundingBox = (object) => {
     // camera.lookAt(0,0,0)
     renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0xFFC0CB);
+    renderer.setClearColor(0xFF0000);
     document.body.appendChild(renderer.domElement)
     css2dRenderer = new CSS2DRenderer(); // Initialize CSS2DRenderer
     document.body.appendChild(css2dRenderer.domElement);  
-    
-//     table.forEach((item) => {
-//       // Create a cube geometry
-//        const cubeGeometry = new THREE.BoxGeometry(5,5,5);
-
-//        // Create a basic material for the cube
-//        const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-//        // Create a mesh by combining the geometry and material
-//        const cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
-
-//        // Position the cube at the specified coordinates
-//        cubeMesh.position.set(item.x, item.y, item.z);
-
-//        // Add the cube mesh to the scene
-//        scene.add(cubeMesh); 
-//  });
        
         return () => {
       window.removeEventListener('resize', onWindowResize);
@@ -611,19 +776,15 @@ const renderCombinedTable = () => {
         onChange={(e) => loadFBXFiles(e.target.files)}
         accept=".fbx"
       />
+        <button onClick={toggleMeasurementMode}>
+        {measuring ? 'Deactivate Measurement Mode' : 'Activate Measurement Mode'}
+      </button>
+      {/* <button className="btn btn-warning" onClick={loadfilesfromfolder}>Click</button> */}
    <div style={{ position: 'relative' }}>
-    <div className="m-3">
-    <h3 className="text-warning text-center ms-5 me-5">Object Table</h3>
-    {renderOffsetTable()}
-    </div>
-    <div className="m-3">
-    <h3 className="text-success text-center ms-5 me-5">Mesh Table</h3>
-    {renderCombinedTable()}
-    </div>
-    <div className="m-4">
+    
     <canvas ref={canvasRef}></canvas>
+    {/* {renderCrossMarks()} */}
 
-    </div>
          
         </div>    
     </div>

@@ -259,8 +259,6 @@ function MergeBoth3andCesium() {
         loader.setDRACOLoader(dracoLoader);
         tiles.manager.addHandler(/\.gltf$/, loader);
         scene.add(tiles.group);
-        // offsetParent.add(tiles.group);
-                    console.log("6")
 
       };
     
