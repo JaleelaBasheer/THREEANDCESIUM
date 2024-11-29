@@ -43,6 +43,14 @@ import FBXViewer from './components/Rohith3';
 import Uploaded from './components/Uploaded';
 import FinalLargeSceneModel from './components/FinalLargeSceneModel';
 import FinalBoxes from './components/FinalBoxes';
+import FbxToGltf from './components/FbxToGltf';
+import FbxToGlb from './components/FbxToGlb';
+import DXFtoSVGConverter from './paper/DxfConverter';
+import SampleTest from './components/SampleTest';
+import CaliperLogVisualization from './components/Chart';
+import WellPathVisualization from './components/WellPath';
+import CombinedWellVisualization from './components/WellPath';
+import TestComponent from './components/BabylonTester';
 // import FBXViewer from './components/Octriandculling';
 // import CombinedFBXViewer from './components/CombinedFbxViewer';
 
@@ -120,8 +128,15 @@ function App() {
     {/*<CombinedFBXViewer/>*/}
     {/* <Test/> */}
     {/* <Uploaded/> */}
-    <FinalLargeSceneModel/>
+    {/* <FinalLargeSceneModel/> */}
     {/* <FinalBoxes/> */}
+    {/* <FbxToGltf/> */}
+    {/* <FbxToGlb/> */}
+    {/* <DXFtoSVGConverter/> */}
+    {/* <SampleTest/> */}
+    {/* <CaliperLogVisualization/> */}
+    <CombinedWellVisualization/>
+    <TestComponent/>
 </div>
   );
 }

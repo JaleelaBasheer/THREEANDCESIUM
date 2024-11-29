@@ -5,6 +5,8 @@ import { openDB } from "idb";
 import { SimplifyModifier } from 'three/examples/jsm/modifiers/SimplifyModifier.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { Octree } from '../Octree'; // Assuming we've moved Octree to a separate file
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
 function FinalLargeSceneModel() {
     const mountRef = useRef(null);
     const sceneRef = useRef(new THREE.Scene());
@@ -27,6 +29,7 @@ function FinalLargeSceneModel() {
     const octreeRef = useRef(null);
     const loadedModels = useRef(new Map());
     const workerRef = useRef(null);
+    
 
     useEffect(() => {
         const initDB = async () => {
@@ -79,65 +82,7 @@ function FinalLargeSceneModel() {
         };
     }, [flySpeed, flyrotationSpeed]);
 
-    // useEffect(() => {
-    //     const initDB = async () => {
-    //         const database = await openDB("fbx-files-db", 1, {
-    //             upgrade(db) {
-    //                 if (!db.objectStoreNames.contains("files")) {
-    //                     db.createObjectStore("files", { keyPath: "id", autoIncrement: true });
-    //                 }
-    //             },
-    //         });
-    //         setDb(database);
-    //     };
-
-    //     initDB();
-      
-    //     rendererRef.current.setSize(window.innerWidth, window.innerHeight);
-    //     rendererRef.current.setClearColor(0xffff00);
-    //     mountRef.current.appendChild(rendererRef.current.domElement);
-      
-    //     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    //     sceneRef.current.add(ambientLight);
-      
-    //     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    //     directionalLight.position.set(0, 1, 0);
-    //     sceneRef.current.add(directionalLight);
-    //     const cameraHelper = new THREE.CameraHelper(cameraRef.current);
-    //     sceneRef.current.add(cameraHelper);
-
-    //       // Initialize Web Worker
-    //       workerRef.current = new Worker(new URL('../components/finalpriorityWorker.js', import.meta.url));
-    //       workerRef.current.onmessage = handleWorkerMessage;
-    //       const sceneSize = 60; // Adjust based on your scene size
-    //       octreeRef.current = new Octree(new THREE.Vector3(0, 0, 0), sceneSize);
-    //       const visualizeOctree = (octree) => {
-    //         const boxHelper = new THREE.BoxHelper(
-    //           new THREE.Mesh(
-    //             new THREE.BoxGeometry(octree.size, octree.size, octree.size),
-    //             new THREE.MeshBasicMaterial()
-    //           )
-    //         );
-    //         boxHelper.position.copy(octree.center);
-    //         sceneRef.current.add(boxHelper);
-          
-    //         if (octree.children) {
-    //           octree.children.forEach(child => visualizeOctree(child));
-    //         }
-    //       };
-          
-    //       // Call this function after creating the Octree
-    //       visualizeOctree(octreeRef.current);
-      
-    //     animate();
-      
-    //     return () => {
-    //       mountRef.current.removeChild(rendererRef.current.domElement);
-    //       if (workerRef.current) {
-    //         workerRef.current.terminate();
-    //     }
-    //     };
-    //   }, []);
+   
       
     const onFileChange = (event) => {
         const fbxLoader = new FBXLoader();
@@ -157,12 +102,12 @@ function FinalLargeSceneModel() {
           Array.from(files).forEach((file) => {
             const priority = determinePriority(file);
 
-            if (storedCenter) {
-                const center = new THREE.Vector3(storedCenter.x, storedCenter.y, storedCenter.z);
-                cameraRef.current.position.set(center.x, center.y, center.z);
-                cameraRef.current.lookAt(center);
-              }
-              else{
+            // if (storedCenter) {
+            //     const center = new THREE.Vector3(storedCenter.x, storedCenter.y, storedCenter.z);
+            //     cameraRef.current.position.set(center.x, center.y, center.z);
+            //     cameraRef.current.lookAt(center);
+            //   }
+            //   else{
                 fbxLoader.load(URL.createObjectURL(file), (object) => {
                     const box = new THREE.Box3().setFromObject(object);
                     octreeRef.current.add(object);
@@ -202,7 +147,7 @@ function FinalLargeSceneModel() {
                       setLoadingProgress(0);
                     }
                   });
-              }
+            //   }
            
     
             loadModel(file, priority);
@@ -237,69 +182,83 @@ function FinalLargeSceneModel() {
     function createBlurredMaterial(color) {
       return new THREE.MeshBasicMaterial({ color: color, transparent: true });
     }
-    const simplifyGeometry = (object, factor) => {
-      const modifier = new SimplifyModifier();
-    
-      object.traverse((child) => {
-        if (child.isMesh && child.geometry) {
-          let geometry = child.geometry;
-    
-          // Ensure we're working with a BufferGeometry
-          if (!(geometry instanceof THREE.BufferGeometry)) {
-            geometry = new THREE.BufferGeometry().fromGeometry(geometry);
-          }
-    
-          const initialVertexCount = geometry.attributes.position.count;
-          const targetVertices = Math.max(10, Math.floor(initialVertexCount * factor)); // Ensure a minimum vertex count
-          const numVerticesToRemove = initialVertexCount - targetVertices;
-    
-          // Only simplify if there are enough vertices
-          if (numVerticesToRemove > 0 && initialVertexCount > 20) { // Adjust threshold as needed
-            try {
-              const simplifiedGeometry = modifier.modify(geometry.clone(), numVerticesToRemove);
-    
-              // Check if the geometry was simplified effectively
-              if (simplifiedGeometry.attributes.position.count >= 10) {
-                child.geometry = simplifiedGeometry;
-    
-                // Dispose of the old geometry to free up memory
-                geometry.dispose();
-              } else {
-                console.warn(`Skipping oversimplified geometry for ${child.name}.`);
-              }
-            } catch (error) {
-              console.warn(`Failed to simplify geometry for ${child.name}:`, error);
+    const MIN_VERTEX_COUNT = 100; // Minimum number of vertices required for simplification
+
+const logGeometryDetails = (geometry, name) => {
+    console.log(`Geometry details for ${name}:`);
+    console.log(`- Vertex count: ${geometry.attributes.position.count}`);
+    console.log(`- Face count: ${geometry.index ? geometry.index.count / 3 : geometry.attributes.position.count / 3}`);
+    console.log(`- Bounding box:`, geometry.boundingBox);
+};
+
+const simplifyGeometry = (geometry, targetPercentage) => {
+    logGeometryDetails(geometry, 'Before simplification');
+
+    if (!(geometry instanceof THREE.BufferGeometry)) {
+        console.warn('Geometry is not a BufferGeometry. Skipping simplification.');
+        return geometry;
+    }
+
+    const originalVertexCount = geometry.attributes.position.count;
+
+    if (originalVertexCount < MIN_VERTEX_COUNT) {
+        console.warn(`Geometry has only ${originalVertexCount} vertices. Skipping simplification.`);
+        return geometry;
+    }
+
+    const modifier = new SimplifyModifier();
+    const targetVertexCount = Math.max(MIN_VERTEX_COUNT, Math.floor(originalVertexCount * targetPercentage));
+
+    if (targetVertexCount >= originalVertexCount) {
+        console.warn('Target vertex count is greater than or equal to original count. Skipping simplification.');
+        return geometry;
+    }
+
+    try {
+        const simplifiedGeometry = modifier.modify(geometry, originalVertexCount - targetVertexCount);
+        logGeometryDetails(simplifiedGeometry, 'After simplification');
+        return simplifiedGeometry;
+    } catch (error) {
+        console.warn('Simplification failed:', error.message);
+        return geometry;
+    }
+};
+
+const createLOD = (object) => {
+    const lod = new THREE.LOD();
+
+    object.traverse((child) => {
+        if (child.isMesh) {
+            const highDetail = child.clone();
+            lod.addLevel(highDetail, 0);
+
+            const geometry = child.geometry;
+            const vertexCount = geometry.attributes.position.count;
+
+            if (vertexCount >= MIN_VERTEX_COUNT) {
+                try {
+                    const mediumGeometry = simplifyGeometry(geometry.clone(), 0.5);
+                    const mediumDetail = new THREE.Mesh(mediumGeometry, child.material.clone());
+                    lod.addLevel(mediumDetail, 50);
+                } catch (error) {
+                    console.warn('Failed to create medium detail:', error.message);
+                }
+
+                try {
+                    const lowGeometry = simplifyGeometry(geometry.clone(), 0.2);
+                    const lowDetail = new THREE.Mesh(lowGeometry, child.material.clone());
+                    lod.addLevel(lowDetail, 150);
+                } catch (error) {
+                    console.warn('Failed to create low detail:', error.message);
+                }
+            } else {
+                console.warn(`Mesh "${child.name}" has too few vertices (${vertexCount}) for LOD. Using single level.`);
             }
-          } else {
-            console.warn(`Skipping simplification for ${child.name} due to low vertex count.`);
-          }
-    
-          // Adjust the scale of the mesh based on the simplification factor
-          child.scale.multiplyScalar(factor);
         }
-      });
-    
-      return object;
-    };
-    
-    // Usage in createLOD function
-    const createLOD = (object) => {
-      const lod = new THREE.LOD();
-    
-      // High detail (original model)
-      lod.addLevel(object, 0);
-    
-      // Medium detail (simplified geometry)
-      const mediumDetail = simplifyGeometry(object.clone(), 0.5);
-      lod.addLevel(mediumDetail, 100);
-    
-      // Low detail (further simplified geometry)
-      const lowDetail = simplifyGeometry(object.clone(), 0.2);
-      lod.addLevel(lowDetail, 300);
-    
-      return lod;
-    };
-    
+    });
+
+    return lod;
+};
   
     
     
@@ -404,7 +363,7 @@ function FinalLargeSceneModel() {
         }
     });
 };
-  
+
   const loadModel = async (file, priorityQueue) => {
     if (db) {
         // Check if the file is already stored in IndexedDB
@@ -548,18 +507,20 @@ const exportGLTF = (object) => {
         });
       };
       const animate = () => {
+        requestAnimationFrame(animate);
         updatePriorityQueue();
         performOcclusionCulling();
-        //  Update LOD
-      // sceneRef.current.traverse((object) => {
-      //  if (object.isLOD) {
-      //   console.log(`LOD for ${object.name}:`, object.getCurrentLevel());
-      //    object.update(cameraRef.current);
-      // }
-      // });
-      requestAnimationFrame(animate);
-       rendererRef.current.render(sceneRef.current, cameraRef.current);
-      };
+
+        // Update LOD
+        sceneRef.current.traverse((object) => {
+            if (object.isLOD) {
+                object.update(cameraRef.current);
+            }
+        });
+
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+    };
+
     
       let continueTranslation = false;
       let continueRotation = false;
@@ -628,21 +589,7 @@ const exportGLTF = (object) => {
             mouse.current.y = mouseEvent.clientY;
         };
         
-        const handleWheel = (event) => {
-        const rotationAngle = -event.deltaY * 0.001;
-    
-        // Get the camera's up vector
-        let cameraUp = new THREE.Vector3(1, 0, 0); // Assuming Y-axis is up
-        cameraUp.applyQuaternion(cameraRef.current.quaternion);
-    
-        // Create a quaternion representing the rotation around the camera's up vector
-        let quaternion = new THREE.Quaternion().setFromAxisAngle(cameraUp, rotationAngle);
-    
-        cameraRef.current.applyQuaternion(quaternion);
-        storeCameraPosition(); // Assuming this function stores camera position
-    
-        };
-    
+   
         const continueCameraMovement = () => {
             const adjustedTranslationSpeed = flySpeed * translationSpeed ;
             if (isMouseDown.current && (continueTranslation || continueRotation)) {

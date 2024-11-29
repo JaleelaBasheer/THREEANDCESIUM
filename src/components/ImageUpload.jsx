@@ -148,8 +148,9 @@ const offsetObject = center.clone().sub(cumulativeCenterObject);
 
 // Log or use the offset as needed
 // console.log(`File ${i + 1} - Offset Object:`, offsetObject.toArray());
-
-   scene.add(object);
+const objectBoxHelper = new THREE.Box3Helper(boundingBoxobject, 0xffff00);
+scene.add(objectBoxHelper);
+  //  scene.add(object);
    fileCenter.push(objectfilecenter)
    loadedOffsetsobject.push(offsetObject);
    offsetsobject.push(offsetObject);
@@ -290,8 +291,9 @@ const offsetObject = center.clone().sub(cumulativeCenterObject);
   
   // Log or use the offset as needed
   // console.log(`File ${i + 1} - Offset Object:`, offsetObject.toArray());
-  
-     scene.add(object);
+  // Create a wireframe box to represent the object's bounding box
+ 
+    //  scene.add(object);
      fileCenter.push(objectfilecenter)
      loadedOffsetsobject.push(offsetObject);
      offsetsobject.push(offsetObject);
@@ -390,9 +392,12 @@ const fitCameraToBoundingBox = (object) => {
   };
 
   const initLight = () => {
-    light = new THREE.PointLight(0xffffff, 1);
-    camera.add(light);
-    scene.add(camera); // Add camera to the scene to allow light movement with the camera
+     
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(0, 1, 0);
+    scene.add(directionalLight);// Add camera to the scene to allow light movement with the camera
   }; 
 
   const onWindowResize = () => {
